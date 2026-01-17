@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { Input } from './player/Input';
 import { Player } from './player/Player';
 import { ThirdPersonCamera } from './game/Camera';
+import { WebSwing } from './abilities/WebSwing';
 
 // Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a2e);
 
 // Fog for atmosphere
-scene.fog = new THREE.Fog(0x1a1a2e, 20, 80);
+scene.fog = new THREE.Fog(0x1a1a2e, 20, 100);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -54,9 +55,62 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Add some simple obstacles (placeholder trees/rocks)
+// Swingable objects (trees/pillars that web can attach to)
+const swingableObjects: THREE.Object3D[] = [];
+
+// Add tall trees/pillars for swinging
+const addSwingableTree = (x: number, z: number, height: number) => {
+  const group = new THREE.Group();
+
+  // Trunk
+  const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, height, 8);
+  const trunkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4a3728,
+    roughness: 0.9,
+  });
+  const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+  trunk.position.y = height / 2;
+  trunk.castShadow = true;
+  trunk.receiveShadow = true;
+  group.add(trunk);
+
+  // Glowing top (like a techno-jungle canopy)
+  const topGeometry = new THREE.SphereGeometry(1.5, 8, 6);
+  const topMaterial = new THREE.MeshStandardMaterial({
+    color: 0x00ff66,
+    emissive: 0x00ff66,
+    emissiveIntensity: 0.2,
+    roughness: 0.5,
+  });
+  const top = new THREE.Mesh(topGeometry, topMaterial);
+  top.position.y = height + 0.5;
+  top.castShadow = true;
+  group.add(top);
+
+  group.position.set(x, 0, z);
+  scene.add(group);
+  swingableObjects.push(group);
+
+  return group;
+};
+
+// Create a forest of swingable trees - taller and more spread out
+for (let i = 0; i < 40; i++) {
+  const angle = (i / 40) * Math.PI * 2;
+  const radius = 15 + Math.random() * 50;
+  const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 20;
+  const z = Math.sin(angle) * radius + (Math.random() - 0.5) * 20;
+
+  // Don't place too close to spawn
+  if (Math.abs(x) > 8 || Math.abs(z) > 8) {
+    const height = 12 + Math.random() * 10; // Taller trees for better swinging
+    addSwingableTree(x, z, height);
+  }
+}
+
+// Add some shorter obstacles too
 const addObstacle = (x: number, z: number, height: number, color: number) => {
-  const geometry = new THREE.CylinderGeometry(0.5, 0.7, height, 8);
+  const geometry = new THREE.CylinderGeometry(0.3, 0.5, height, 8);
   const material = new THREE.MeshStandardMaterial({ color });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(x, height / 2, z);
@@ -65,13 +119,12 @@ const addObstacle = (x: number, z: number, height: number, color: number) => {
   scene.add(mesh);
 };
 
-// Scatter some placeholder trees
-for (let i = 0; i < 20; i++) {
-  const x = (Math.random() - 0.5) * 60;
-  const z = (Math.random() - 0.5) * 60;
-  // Don't place too close to spawn
+// Scatter some smaller obstacles
+for (let i = 0; i < 15; i++) {
+  const x = (Math.random() - 0.5) * 40;
+  const z = (Math.random() - 0.5) * 40;
   if (Math.abs(x) > 5 || Math.abs(z) > 5) {
-    const height = 4 + Math.random() * 4;
+    const height = 2 + Math.random() * 3;
     addObstacle(x, z, height, 0x335533);
   }
 }
@@ -83,6 +136,9 @@ scene.add(player.mesh);
 
 // Camera
 const thirdPersonCamera = new ThirdPersonCamera(input);
+
+// Web Swing ability
+const webSwing = new WebSwing(scene, thirdPersonCamera.camera, input);
 
 // UI overlay for instructions
 const overlay = document.createElement('div');
@@ -106,15 +162,54 @@ overlay.innerHTML = `
       WASD - Move<br>
       SHIFT - Sprint<br>
       SPACE - Jump<br>
-      MOUSE - Look around
+      MOUSE - Look around<br>
+      <span style="color: #00ffff;">LEFT CLICK (hold) - Web Swing!</span>
     </div>
   </div>
 `;
 document.body.appendChild(overlay);
 
-// Click to lock pointer
-renderer.domElement.addEventListener('click', () => {
-  input.requestPointerLock(renderer.domElement);
+// Crosshair for aiming
+const crosshair = document.createElement('div');
+crosshair.id = 'crosshair';
+crosshair.innerHTML = `
+  <div style="
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    pointer-events: none;
+  ">
+    <div style="
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(0, 255, 255, 0.5);
+      transform: translateY(-50%);
+    "></div>
+    <div style="
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: rgba(0, 255, 255, 0.5);
+      transform: translateX(-50%);
+    "></div>
+  </div>
+`;
+document.body.appendChild(crosshair);
+
+// Click to lock pointer (but not when already locked - that's for web swing)
+renderer.domElement.addEventListener('mousedown', (e) => {
+  if (!input.pointerLocked) {
+    e.preventDefault();
+    input.requestPointerLock(renderer.domElement);
+  }
 });
 
 // Handle window resize
@@ -132,12 +227,43 @@ function animate() {
   const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1); // Cap at 100ms
   lastTime = currentTime;
 
-  // Update instructions based on pointer lock state
+  // Update instructions based on state
   const instructions = document.getElementById('instructions');
   if (instructions) {
-    instructions.textContent = input.pointerLocked
-      ? 'Go explore!'
-      : 'Click to start!';
+    if (!input.pointerLocked) {
+      instructions.textContent = 'Click to start!';
+    } else if (webSwing.swinging) {
+      instructions.textContent = 'Swinging! Release to let go!';
+      instructions.style.color = '#00ffff';
+    } else {
+      instructions.textContent = 'Look at trees and hold LEFT CLICK to swing!';
+      instructions.style.color = 'white';
+    }
+  }
+
+  // Show/hide crosshair based on pointer lock
+  crosshair.style.display = input.pointerLocked ? 'block' : 'none';
+
+  // Handle web swing input
+  if (input.pointerLocked) {
+    if (input.webShootJustPressed && !webSwing.swinging) {
+      // Try to attach web
+      const attached = webSwing.tryAttach(player.position, swingableObjects);
+      if (attached) {
+        player.setSwinging(true);
+      }
+    }
+
+    if (input.webShootJustReleased && webSwing.swinging) {
+      // Release web - player keeps momentum
+      webSwing.detach();
+      player.setSwinging(false);
+    }
+  }
+
+  // Update web swing physics (modifies player velocity)
+  if (webSwing.swinging) {
+    webSwing.update(player.position, player.velocity, deltaTime);
   }
 
   // Update player movement with camera direction
@@ -147,6 +273,9 @@ function animate() {
   // Update camera to follow player
   thirdPersonCamera.update(player.position, deltaTime);
 
+  // Clear input frame state
+  input.endFrame();
+
   // Render
   renderer.render(scene, thirdPersonCamera.camera);
 }
@@ -154,4 +283,4 @@ function animate() {
 animate();
 
 console.log('Robot Spiderman: Techno-Jungle Adventure loaded!');
-console.log('Click the game window, then use WASD to move and mouse to look around!');
+console.log('Click the game, use WASD to move, and hold LEFT CLICK to web swing!');

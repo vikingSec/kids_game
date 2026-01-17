@@ -7,10 +7,17 @@ export class Input {
   private mouseDeltaY = 0;
   private isPointerLocked = false;
 
+  // Mouse button tracking
+  private mouseButtons: Set<number> = new Set();
+  private mouseButtonsJustPressed: Set<number> = new Set();
+  private mouseButtonsJustReleased: Set<number> = new Set();
+
   constructor() {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('mousemove', this.onMouseMove);
+    window.addEventListener('mousedown', this.onMouseDown);
+    window.addEventListener('mouseup', this.onMouseUp);
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
   }
 
@@ -33,6 +40,16 @@ export class Input {
 
   private onPointerLockChange = () => {
     this.isPointerLocked = document.pointerLockElement !== null;
+  };
+
+  private onMouseDown = (e: MouseEvent) => {
+    this.mouseButtons.add(e.button);
+    this.mouseButtonsJustPressed.add(e.button);
+  };
+
+  private onMouseUp = (e: MouseEvent) => {
+    this.mouseButtons.delete(e.button);
+    this.mouseButtonsJustReleased.add(e.button);
   };
 
   // Request pointer lock (call on click)
@@ -70,6 +87,38 @@ export class Input {
     return this.isKeyDown('ShiftLeft') || this.isKeyDown('ShiftRight');
   }
 
+  // Mouse button helpers (0 = left, 1 = middle, 2 = right)
+  isMouseButtonDown(button: number): boolean {
+    return this.mouseButtons.has(button);
+  }
+
+  isMouseButtonJustPressed(button: number): boolean {
+    return this.mouseButtonsJustPressed.has(button);
+  }
+
+  isMouseButtonJustReleased(button: number): boolean {
+    return this.mouseButtonsJustReleased.has(button);
+  }
+
+  // Web swing with left click
+  get webShoot(): boolean {
+    return this.isMouseButtonDown(0);
+  }
+
+  get webShootJustPressed(): boolean {
+    return this.isMouseButtonJustPressed(0);
+  }
+
+  get webShootJustReleased(): boolean {
+    return this.isMouseButtonJustReleased(0);
+  }
+
+  // Call at end of frame to clear just-pressed/released states
+  endFrame() {
+    this.mouseButtonsJustPressed.clear();
+    this.mouseButtonsJustReleased.clear();
+  }
+
   // Get and reset mouse delta (call once per frame)
   getMouseDelta(): { x: number; y: number } {
     const delta = { x: this.mouseDeltaX, y: this.mouseDeltaY };
@@ -87,6 +136,8 @@ export class Input {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mousedown', this.onMouseDown);
+    window.removeEventListener('mouseup', this.onMouseUp);
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);
   }
 }

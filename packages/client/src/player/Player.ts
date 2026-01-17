@@ -3,7 +3,7 @@ import { Input } from './Input';
 
 export class Player {
   mesh: THREE.Group;
-  private velocity = new THREE.Vector3();
+  velocity = new THREE.Vector3(); // Public for web swing to modify
   private input: Input;
 
   // Movement settings
@@ -12,9 +12,11 @@ export class Player {
   private readonly JUMP_FORCE = 12;
   private readonly GRAVITY = 30;
   private readonly GROUND_FRICTION = 10;
+  private readonly AIR_CONTROL = 0.3; // Reduced control while in air
 
   // State
   private isGrounded = true;
+  private isSwinging = false;
   private cameraAngle = 0; // Y rotation from camera
 
   constructor(input: Input) {
@@ -110,6 +112,13 @@ export class Player {
     this.cameraAngle = angle;
   }
 
+  setSwinging(swinging: boolean) {
+    this.isSwinging = swinging;
+    if (swinging) {
+      this.isGrounded = false;
+    }
+  }
+
   update(deltaTime: number) {
     // Calculate movement direction based on input and camera angle
     const moveDirection = new THREE.Vector3();
@@ -124,34 +133,52 @@ export class Player {
       moveDirection.normalize();
       moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngle);
 
-      // Apply movement speed
-      let speed = this.MOVE_SPEED;
-      if (this.input.sprint) speed *= this.SPRINT_MULTIPLIER;
+      // When swinging, only apply air control (reduced influence)
+      if (this.isSwinging) {
+        // Add slight directional influence while swinging
+        this.velocity.x += moveDirection.x * this.MOVE_SPEED * this.AIR_CONTROL * deltaTime;
+        this.velocity.z += moveDirection.z * this.MOVE_SPEED * this.AIR_CONTROL * deltaTime;
+      } else {
+        // Normal ground movement
+        let speed = this.MOVE_SPEED;
+        if (this.input.sprint) speed *= this.SPRINT_MULTIPLIER;
 
-      this.velocity.x = moveDirection.x * speed;
-      this.velocity.z = moveDirection.z * speed;
+        if (this.isGrounded) {
+          this.velocity.x = moveDirection.x * speed;
+          this.velocity.z = moveDirection.z * speed;
+        } else {
+          // Air control (less responsive than ground)
+          this.velocity.x += moveDirection.x * speed * this.AIR_CONTROL * deltaTime * 10;
+          this.velocity.z += moveDirection.z * speed * this.AIR_CONTROL * deltaTime * 10;
+        }
+      }
 
-      // Rotate player to face movement direction
+      // Rotate player to face movement direction (slower while swinging)
       const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
+      const rotationSpeed = this.isSwinging ? 0.05 : 0.15;
       this.mesh.rotation.y = THREE.MathUtils.lerp(
         this.mesh.rotation.y,
         targetRotation,
-        0.15
+        rotationSpeed
       );
-    } else {
-      // Apply friction when not moving
-      this.velocity.x *= Math.max(0, 1 - this.GROUND_FRICTION * deltaTime);
-      this.velocity.z *= Math.max(0, 1 - this.GROUND_FRICTION * deltaTime);
+    } else if (!this.isSwinging) {
+      // Apply friction when not moving (only when not swinging)
+      if (this.isGrounded) {
+        this.velocity.x *= Math.max(0, 1 - this.GROUND_FRICTION * deltaTime);
+        this.velocity.z *= Math.max(0, 1 - this.GROUND_FRICTION * deltaTime);
+      }
     }
 
-    // Jumping
-    if (this.input.jump && this.isGrounded) {
+    // Jumping - can't jump while swinging
+    if (this.input.jump && this.isGrounded && !this.isSwinging) {
       this.velocity.y = this.JUMP_FORCE;
       this.isGrounded = false;
     }
 
-    // Apply gravity
-    this.velocity.y -= this.GRAVITY * deltaTime;
+    // Apply gravity (only when not swinging - WebSwing handles its own gravity)
+    if (!this.isSwinging) {
+      this.velocity.y -= this.GRAVITY * deltaTime;
+    }
 
     // Update position
     this.mesh.position.x += this.velocity.x * deltaTime;
@@ -163,7 +190,16 @@ export class Player {
       this.mesh.position.y = 0;
       this.velocity.y = 0;
       this.isGrounded = true;
+      this.isSwinging = false; // Stop swinging when hitting ground
     }
+  }
+
+  get grounded(): boolean {
+    return this.isGrounded;
+  }
+
+  get swinging(): boolean {
+    return this.isSwinging;
   }
 
   get position(): THREE.Vector3 {
