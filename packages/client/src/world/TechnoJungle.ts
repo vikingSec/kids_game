@@ -29,12 +29,74 @@ export class TechnoJungle {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+    this.createSky();
     this.createTerrain();
     this.createTrees();
     this.createGlowingPlants();
     this.createMushrooms();
     this.createTechDebris();
     this.createFloatingParticles();
+  }
+
+  private createSky() {
+    // === STARS ===
+    const starCount = 2000;
+    const starPositions = new Float32Array(starCount * 3);
+
+    for (let i = 0; i < starCount; i++) {
+      // Distribute stars on a dome above the world
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.5; // Only upper hemisphere
+      const radius = 300 + Math.random() * 100;
+
+      starPositions[i * 3] = Math.sin(phi) * Math.cos(theta) * radius;
+      starPositions[i * 3 + 1] = Math.cos(phi) * radius + 50; // Offset upward
+      starPositions[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
+    }
+
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+
+    const starMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 1.5,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: false,
+    });
+
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    this.scene.add(stars);
+
+    // === TWO MOONS ===
+    // Moon 1 - larger, white
+    const moon1Geometry = new THREE.SphereGeometry(15, 32, 32);
+    const moon1Material = new THREE.MeshStandardMaterial({
+      color: 0xeeeeee,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.3,
+      roughness: 0.8,
+    });
+    const moon1 = new THREE.Mesh(moon1Geometry, moon1Material);
+    moon1.position.set(100, 80, -100);
+    this.scene.add(moon1);
+
+    // Moon 2 - smaller, slightly blue tint
+    const moon2Geometry = new THREE.SphereGeometry(8, 24, 24);
+    const moon2Material = new THREE.MeshStandardMaterial({
+      color: 0xddddff,
+      emissive: 0xaaaaff,
+      emissiveIntensity: 0.2,
+      roughness: 0.8,
+    });
+    const moon2 = new THREE.Mesh(moon2Geometry, moon2Material);
+    moon2.position.set(-80, 60, 50);
+    this.scene.add(moon2);
+
+    // === MOONLIGHT (subtle ambient) ===
+    const moonLight = new THREE.AmbientLight(0xffffff, 0.1);
+    this.scene.add(moonLight);
   }
 
   // Get terrain height at any x,z position using raycast (accurate to visual mesh)
@@ -54,9 +116,9 @@ export class TechnoJungle {
   }
 
   private createTerrain() {
-    // Main ground with height variation
-    const groundSize = 200;
-    const segments = 80; // Good balance of detail vs performance
+    // Main ground with height variation (4x larger world)
+    const groundSize = 400;
+    const segments = 120; // More segments for larger world
     const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize, segments, segments);
 
     // Add rolling hills - can be more dramatic now that we use raycasting
@@ -106,8 +168,8 @@ export class TechnoJungle {
       opacity: 0.15,
     });
 
-    const gridSize = 200;
-    const gridSpacing = 10;
+    const gridSize = 400;
+    const gridSpacing = 20; // Larger spacing for bigger world
 
     for (let i = -gridSize / 2; i <= gridSize / 2; i += gridSpacing) {
       // X lines
@@ -131,12 +193,13 @@ export class TechnoJungle {
   }
 
   private createTrees() {
-    // Create varied techno-trees throughout the world
-    for (let i = 0; i < 50; i++) {
-      const angle = (i / 50) * Math.PI * 2;
-      const radius = 15 + Math.random() * 55;
-      const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 25;
-      const z = Math.sin(angle) * radius + (Math.random() - 0.5) * 25;
+    // Create varied techno-trees throughout the larger world
+    // More trees for 4x larger area (roughly 2x more since density can be lower)
+    for (let i = 0; i < 120; i++) {
+      const angle = (i / 120) * Math.PI * 2;
+      const radius = 15 + Math.random() * 170; // Extended for 400x400 world
+      const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 40;
+      const z = Math.sin(angle) * radius + (Math.random() - 0.5) * 40;
 
       // Don't place too close to spawn
       if (Math.abs(x) > 10 || Math.abs(z) > 10) {
@@ -370,12 +433,12 @@ export class TechnoJungle {
   }
 
   private createGlowingPlants() {
-    // Scatter glowing plants around (reduced count for performance)
+    // Scatter glowing plants around the larger world
     const plantColors = [0x00ff66, 0x00ffaa, 0x66ff00, 0x00ff88];
 
-    for (let i = 0; i < 40; i++) {
-      const x = (Math.random() - 0.5) * 160;
-      const z = (Math.random() - 0.5) * 160;
+    for (let i = 0; i < 100; i++) {
+      const x = (Math.random() - 0.5) * 360; // Extended for 400x400 world
+      const z = (Math.random() - 0.5) * 360;
 
       // Don't place at spawn or too close to trees
       if (Math.sqrt(x * x + z * z) < 8) continue;
@@ -441,12 +504,12 @@ export class TechnoJungle {
   }
 
   private createMushrooms() {
-    // Bioluminescent mushroom clusters (reduced count for performance)
+    // Bioluminescent mushroom clusters for larger world
     const mushroomColors = [0x00ffff, 0xff00ff, 0x8800ff, 0x00ff88];
 
-    for (let i = 0; i < 15; i++) {
-      const x = (Math.random() - 0.5) * 140;
-      const z = (Math.random() - 0.5) * 140;
+    for (let i = 0; i < 40; i++) {
+      const x = (Math.random() - 0.5) * 360; // Extended for 400x400 world
+      const z = (Math.random() - 0.5) * 360;
 
       if (Math.sqrt(x * x + z * z) < 10) continue;
 
@@ -522,10 +585,10 @@ export class TechnoJungle {
   }
 
   private createTechDebris() {
-    // Scattered tech elements (reduced count for performance)
-    for (let i = 0; i < 12; i++) {
-      const x = (Math.random() - 0.5) * 150;
-      const z = (Math.random() - 0.5) * 150;
+    // Scattered tech elements for larger world
+    for (let i = 0; i < 30; i++) {
+      const x = (Math.random() - 0.5) * 360; // Extended for 400x400 world
+      const z = (Math.random() - 0.5) * 360;
 
       if (Math.sqrt(x * x + z * z) < 12) continue;
 
@@ -667,14 +730,14 @@ export class TechnoJungle {
   }
 
   private createFloatingParticles() {
-    // Floating particle sprites for atmosphere
-    const particleCount = 100;
+    // Floating particle sprites for atmosphere in larger world
+    const particleCount = 250;
     const positions = new Float32Array(particleCount * 3);
 
     for (let i = 0; i < particleCount; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 100;
-      positions[i * 3 + 1] = 1 + Math.random() * 15;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+      positions[i * 3] = (Math.random() - 0.5) * 300; // Extended for 400x400 world
+      positions[i * 3 + 1] = 1 + Math.random() * 20;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 300;
     }
 
     const geometry = new THREE.BufferGeometry();
