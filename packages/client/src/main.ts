@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { Input } from './player/Input';
 import { Player } from './player/Player';
+import { RemotePlayer } from './player/RemotePlayer';
 import { ThirdPersonCamera } from './game/Camera';
 import { WebSwing } from './abilities/WebSwing';
 import { TechnoJungle } from './world/TechnoJungle';
+import { Connection, ConnectionStatus } from './network/Connection';
+import type { PlayerData } from '@kids-game/shared';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -68,6 +71,72 @@ const thirdPersonCamera = new ThirdPersonCamera(input);
 // Web Swing ability
 const webSwing = new WebSwing(scene, thirdPersonCamera.camera);
 
+// === NETWORKING ===
+const remotePlayers: Map<string, RemotePlayer> = new Map();
+
+// Generate a random player name
+const playerName = `Spider-${Math.floor(Math.random() * 1000)}`;
+
+// Network connection
+const SERVER_URL = `ws://${window.location.hostname}:3001`;
+
+const connection = new Connection(SERVER_URL, {
+  onStatusChange: (status: ConnectionStatus) => {
+    updateNetworkStatus(status);
+  },
+  onWelcome: (yourId: string, existingPlayers: Array<{ id: string; name: string }>) => {
+    console.log(`[Network] Welcome! Your ID: ${yourId}`);
+    // Add existing players
+    existingPlayers.forEach(p => {
+      addRemotePlayer(p.id, p.name);
+    });
+  },
+  onPlayerJoined: (id: string, name: string) => {
+    console.log(`[Network] ${name} joined!`);
+    addRemotePlayer(id, name);
+  },
+  onPlayerLeft: (id: string) => {
+    const remote = remotePlayers.get(id);
+    if (remote) {
+      console.log(`[Network] ${remote.name} left`);
+      removeRemotePlayer(id);
+    }
+  },
+  onGameState: (players: PlayerData[]) => {
+    // Update remote player positions
+    players.forEach(data => {
+      const remote = remotePlayers.get(data.id);
+      if (remote) {
+        remote.updateFromData(data);
+      }
+    });
+  },
+});
+
+function addRemotePlayer(id: string, name: string): void {
+  if (remotePlayers.has(id)) return;
+  const remote = new RemotePlayer(id, name);
+  remotePlayers.set(id, remote);
+  scene.add(remote.mesh);
+}
+
+function removeRemotePlayer(id: string): void {
+  const remote = remotePlayers.get(id);
+  if (remote) {
+    scene.remove(remote.mesh);
+    remote.dispose();
+    remotePlayers.delete(id);
+  }
+}
+
+// Connect to server
+connection.connect(playerName);
+
+// Network position update rate (10Hz to reduce bandwidth)
+const NETWORK_UPDATE_INTERVAL = 100; // ms
+let lastNetworkUpdate = 0;
+let wasSwinging = false;
+
 // UI overlay for instructions
 const overlay = document.createElement('div');
 overlay.id = 'overlay';
@@ -87,6 +156,7 @@ overlay.innerHTML = `
     backdrop-filter: blur(4px);
   ">
     <div style="font-size: 18px; margin-bottom: 10px; color: #00ffff; text-shadow: 0 0 10px #00ffff;">Robot Spiderman</div>
+    <div id="network-status" style="font-size: 12px; margin-bottom: 8px; color: #ffaa00;">Connecting...</div>
     <div id="instructions">Click to start!</div>
     <div style="margin-top: 10px; font-size: 12px; opacity: 0.7;">
       WASD - Move<br>
@@ -99,6 +169,30 @@ overlay.innerHTML = `
   </div>
 `;
 document.body.appendChild(overlay);
+
+function updateNetworkStatus(status: ConnectionStatus): void {
+  const statusEl = document.getElementById('network-status');
+  if (!statusEl) return;
+
+  switch (status) {
+    case 'connecting':
+      statusEl.textContent = 'Connecting...';
+      statusEl.style.color = '#ffaa00';
+      break;
+    case 'connected':
+      statusEl.textContent = `Connected as ${playerName}`;
+      statusEl.style.color = '#00ff00';
+      break;
+    case 'disconnected':
+      statusEl.textContent = 'Disconnected - Reconnecting...';
+      statusEl.style.color = '#ff4444';
+      break;
+    case 'full':
+      statusEl.textContent = 'Server full (max 5 players)';
+      statusEl.style.color = '#ff4444';
+      break;
+  }
+}
 
 // Click to lock pointer (but not when already locked - that's for web swing)
 renderer.domElement.addEventListener('mousedown', (e) => {
@@ -158,6 +252,11 @@ function animate() {
   // Update world animations (glowing plants, circuit pulses, etc.)
   technoJungle.update(deltaTime);
 
+  // Update remote players (interpolation)
+  remotePlayers.forEach(remote => {
+    remote.update(deltaTime);
+  });
+
   // Update aim indicator (shows where web will attach)
   if (input.pointerLocked && !webSwing.swinging) {
     webSwing.updateAimIndicator(player.position, technoJungle.swingableObjects);
@@ -189,6 +288,15 @@ function animate() {
       );
       if (attached) {
         player.setSwinging(true);
+        // Send swing start to server
+        const attachPoint = webSwing.webAttachPoint;
+        if (attachPoint) {
+          connection.sendSwing(true, {
+            x: attachPoint.x,
+            y: attachPoint.y,
+            z: attachPoint.z,
+          });
+        }
       }
     }
 
@@ -196,6 +304,8 @@ function animate() {
     if (input.webShootJustReleased && webSwing.swinging) {
       webSwing.detach();
       player.setSwinging(false);
+      // Send swing end to server
+      connection.sendSwing(false);
     }
 
     // Jump while swinging = release and boost upward!
@@ -204,6 +314,8 @@ function animate() {
       player.setSwinging(false);
       // Give a nice upward boost when jumping off web
       player.velocity.y += 10;
+      // Send swing end to server
+      connection.sendSwing(false);
     }
   }
 
@@ -226,6 +338,24 @@ function animate() {
   // Update camera to follow player
   thirdPersonCamera.update(player.position, deltaTime);
 
+  // Send position update to server (throttled)
+  if (currentTime - lastNetworkUpdate > NETWORK_UPDATE_INTERVAL) {
+    lastNetworkUpdate = currentTime;
+    const networkState = player.getNetworkState();
+    connection.sendPosition(
+      player.position.x,
+      player.position.y,
+      player.position.z,
+      player.rotation.y,
+      networkState.state
+    );
+  }
+
+  // Track swing state changes for immediate updates
+  if (player.swinging !== wasSwinging) {
+    wasSwinging = player.swinging;
+  }
+
   // Clear input frame state
   input.endFrame();
 
@@ -236,4 +366,5 @@ function animate() {
 animate();
 
 console.log('Robot Spiderman: Techno-Jungle Adventure loaded!');
+console.log(`Playing as: ${playerName}`);
 console.log('Explore the bioluminescent forest and swing between the trees!');

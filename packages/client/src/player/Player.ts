@@ -451,4 +451,18 @@ export class Player {
   get rotation(): THREE.Euler {
     return this.mesh.rotation;
   }
+
+  // Get current state for network sync
+  getNetworkState(): { state: 'idle' | 'walking' | 'running' | 'swinging' } {
+    if (this.isSwinging) {
+      return { state: 'swinging' };
+    }
+    const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
+    if (speed < 0.5) {
+      return { state: 'idle' };
+    } else if (speed > this.MOVE_SPEED * 1.2) {
+      return { state: 'running' };
+    }
+    return { state: 'walking' };
+  }
 }
