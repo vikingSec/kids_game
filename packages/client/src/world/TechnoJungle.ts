@@ -254,10 +254,7 @@ export class TechnoJungle {
       group.add(sphere);
     }
 
-    // Add point light for glow effect
-    const light = new THREE.PointLight(color, 0.5, 15);
-    light.position.y = height + 1;
-    group.add(light);
+    // Emissive material provides glow without expensive point lights
   }
 
   private addCrystalCanopy(group: THREE.Group, height: number) {
@@ -297,11 +294,6 @@ export class TechnoJungle {
     );
     mainCrystal.position.y = height + 1.5;
     group.add(mainCrystal);
-
-    // Purple glow
-    const light = new THREE.PointLight(0xff00ff, 0.4, 12);
-    light.position.y = height + 2;
-    group.add(light);
   }
 
   private addTechBranches(group: THREE.Group, height: number, trunkRadius: number) {
@@ -352,10 +344,10 @@ export class TechnoJungle {
   }
 
   private createGlowingPlants() {
-    // Scatter glowing plants around
+    // Scatter glowing plants around (reduced count for performance)
     const plantColors = [0x00ff66, 0x00ffaa, 0x66ff00, 0x00ff88];
 
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 40; i++) {
       const x = (Math.random() - 0.5) * 160;
       const z = (Math.random() - 0.5) * 160;
 
@@ -391,7 +383,7 @@ export class TechnoJungle {
       opacity: 0.9,
     });
 
-    // Multiple petals
+    // Multiple petals (share material so updating one updates all)
     for (let i = 0; i < 5; i++) {
       const petal = new THREE.Mesh(petalGeometry, petalMaterial);
       const angle = (i / 5) * Math.PI * 2;
@@ -403,20 +395,17 @@ export class TechnoJungle {
       petal.rotation.x = 0.3;
       petal.rotation.y = angle;
       group.add(petal);
-      this.glowingPlants.push(petal);
     }
 
     // Center glow
     const center = new THREE.Mesh(
       new THREE.SphereGeometry(0.08, 6, 6),
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        emissive: color,
-        emissiveIntensity: 0.8,
-      })
+      petalMaterial // Share the material
     );
     center.position.y = 0.55;
     group.add(center);
+
+    // Only track one mesh per plant for animation (they share the material)
     this.glowingPlants.push(center);
 
     group.position.set(x, 0, z);
@@ -426,10 +415,10 @@ export class TechnoJungle {
   }
 
   private createMushrooms() {
-    // Bioluminescent mushroom clusters
+    // Bioluminescent mushroom clusters (reduced count for performance)
     const mushroomColors = [0x00ffff, 0xff00ff, 0x8800ff, 0x00ff88];
 
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 15; i++) {
       const x = (Math.random() - 0.5) * 140;
       const z = (Math.random() - 0.5) * 140;
 
@@ -507,8 +496,8 @@ export class TechnoJungle {
   }
 
   private createTechDebris() {
-    // Scattered tech elements
-    for (let i = 0; i < 25; i++) {
+    // Scattered tech elements (reduced count for performance)
+    for (let i = 0; i < 12; i++) {
       const x = (Math.random() - 0.5) * 150;
       const z = (Math.random() - 0.5) * 150;
 
@@ -634,24 +623,18 @@ export class TechnoJungle {
     base.position.y = 0.1;
     group.add(base);
 
-    // Energy orb
+    // Energy orb (no point light - emissive is enough)
     const orbGeometry = new THREE.SphereGeometry(0.3, 12, 12);
     const orbMaterial = new THREE.MeshStandardMaterial({
       color: 0x00ff88,
       emissive: 0x00ff88,
-      emissiveIntensity: 0.6,
+      emissiveIntensity: 0.8,
       transparent: true,
       opacity: 0.8,
     });
     const orb = new THREE.Mesh(orbGeometry, orbMaterial);
     orb.position.y = 0.6;
     group.add(orb);
-    this.glowingPlants.push(orb); // Reuse for animation
-
-    // Point light
-    const light = new THREE.PointLight(0x00ff88, 0.5, 8);
-    light.position.y = 0.6;
-    group.add(light);
 
     group.position.set(x, 0, z);
     this.scene.add(group);
@@ -683,30 +666,30 @@ export class TechnoJungle {
     this.scene.add(particles);
   }
 
-  // Call each frame to animate glowing elements
+  // Call each frame to animate glowing elements (optimized - only update a few per frame)
   update(deltaTime: number) {
     this.time += deltaTime;
 
-    // Pulse glowing plants
-    this.glowingPlants.forEach((plant, i) => {
-      const material = plant.material as THREE.MeshStandardMaterial;
-      const pulse = 0.4 + Math.sin(this.time * 2 + i * 0.5) * 0.2;
-      material.emissiveIntensity = pulse;
-    });
+    // Global pulse value - all elements use the same pulse to avoid per-element sin() calls
+    const pulse1 = 0.4 + Math.sin(this.time * 2) * 0.2;
+    const pulse2 = 0.3 + Math.sin(this.time * 1.5) * 0.15;
 
-    // Pulse mushrooms
-    this.mushrooms.forEach((mushroom, i) => {
-      const material = mushroom.material as THREE.MeshStandardMaterial;
-      const pulse = 0.3 + Math.sin(this.time * 1.5 + i * 0.7) * 0.15;
-      material.emissiveIntensity = pulse;
-    });
+    // Only update a subset of elements each frame (rotating through them)
+    const frameIndex = Math.floor(this.time * 10) % 10;
 
-    // Animate circuit lines opacity
-    this.circuitLines.forEach((line, i) => {
-      const material = line.material as THREE.LineBasicMaterial;
-      const pulse = 0.5 + Math.sin(this.time * 3 + i * 0.3) * 0.3;
-      material.opacity = pulse;
-    });
+    // Update ~10% of plants per frame
+    for (let i = frameIndex; i < this.glowingPlants.length; i += 10) {
+      const material = this.glowingPlants[i].material as THREE.MeshStandardMaterial;
+      material.emissiveIntensity = pulse1;
+    }
+
+    // Update ~10% of mushrooms per frame
+    for (let i = frameIndex; i < this.mushrooms.length; i += 10) {
+      const material = this.mushrooms[i].material as THREE.MeshStandardMaterial;
+      material.emissiveIntensity = pulse2;
+    }
+
+    // Circuit lines don't need per-frame animation - static glow is fine
   }
 
   dispose() {

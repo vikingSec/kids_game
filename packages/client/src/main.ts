@@ -7,10 +7,10 @@ import { TechnoJungle } from './world/TechnoJungle';
 
 // Scene setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a1a);
+scene.background = new THREE.Color(0x1a2a3a);
 
-// Fog for mysterious atmosphere
-scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015);
+// Lighter fog for atmosphere without making it too dark
+scene.fog = new THREE.FogExp2(0x1a2a3a, 0.008);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -19,44 +19,40 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
+renderer.toneMappingExposure = 1.5;
 document.getElementById('app')!.appendChild(renderer.domElement);
 
-// === LIGHTING ===
-// Ambient - slightly blue for night feel
-const ambientLight = new THREE.AmbientLight(0x202040, 0.3);
+// === LIGHTING (brighter for better visibility) ===
+// Ambient light - brighter
+const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
 scene.add(ambientLight);
 
 // Hemisphere light - sky to ground color gradient
-const hemisphereLight = new THREE.HemisphereLight(0x0044aa, 0x002211, 0.4);
+const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x2d5a27, 0.5);
 scene.add(hemisphereLight);
 
-// Main directional light (moonlight)
-const moonLight = new THREE.DirectionalLight(0xaaccff, 0.6);
-moonLight.position.set(30, 50, 20);
-moonLight.castShadow = true;
-moonLight.shadow.mapSize.width = 2048;
-moonLight.shadow.mapSize.height = 2048;
-moonLight.shadow.camera.near = 0.5;
-moonLight.shadow.camera.far = 120;
-moonLight.shadow.camera.left = -50;
-moonLight.shadow.camera.right = 50;
-moonLight.shadow.camera.top = 50;
-moonLight.shadow.camera.bottom = -50;
-scene.add(moonLight);
+// Main directional light (sun/moon)
+const sunLight = new THREE.DirectionalLight(0xffffee, 1.0);
+sunLight.position.set(30, 50, 20);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 120;
+sunLight.shadow.camera.left = -50;
+sunLight.shadow.camera.right = 50;
+sunLight.shadow.camera.top = 50;
+sunLight.shadow.camera.bottom = -50;
+scene.add(sunLight);
 
-// Accent point lights for techno-jungle atmosphere
-const accentLight1 = new THREE.PointLight(0x00ff88, 0.8, 30);
-accentLight1.position.set(15, 5, 15);
+// Just a couple accent point lights near spawn (not many for performance)
+const accentLight1 = new THREE.PointLight(0x00ff88, 0.6, 25);
+accentLight1.position.set(8, 4, 8);
 scene.add(accentLight1);
 
-const accentLight2 = new THREE.PointLight(0xff00ff, 0.6, 25);
-accentLight2.position.set(-15, 5, -15);
+const accentLight2 = new THREE.PointLight(0xff00ff, 0.4, 20);
+accentLight2.position.set(-8, 4, -8);
 scene.add(accentLight2);
-
-const accentLight3 = new THREE.PointLight(0x00ffff, 0.5, 20);
-accentLight3.position.set(-10, 4, 20);
-scene.add(accentLight3);
 
 // === WORLD ===
 const technoJungle = new TechnoJungle(scene);
