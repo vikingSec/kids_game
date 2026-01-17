@@ -39,16 +39,38 @@ export class WebSwing {
       color: 0xffffff,
     });
 
-    // Aim indicator material (glowing green)
+    // Aim indicator material (bright glowing green)
     this.aimIndicatorMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ff00,
       transparent: true,
-      opacity: 0.8,
+      opacity: 1.0,
     });
 
-    // Create aim indicator (small sphere)
-    const indicatorGeometry = new THREE.SphereGeometry(0.5, 8, 8);
-    this.aimIndicator = new THREE.Mesh(indicatorGeometry, this.aimIndicatorMaterial);
+    // Create aim indicator group with inner sphere + outer glow ring
+    const indicatorGroup = new THREE.Group();
+
+    // Inner solid sphere
+    const innerGeometry = new THREE.SphereGeometry(0.6, 12, 12);
+    const innerSphere = new THREE.Mesh(innerGeometry, this.aimIndicatorMaterial);
+    indicatorGroup.add(innerSphere);
+
+    // Outer glow ring
+    const ringGeometry = new THREE.TorusGeometry(1.2, 0.1, 8, 24);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.6,
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.rotation.x = Math.PI / 2; // Horizontal ring
+    indicatorGroup.add(ring);
+
+    // Second ring at angle for more visibility
+    const ring2 = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring2.rotation.z = Math.PI / 2; // Vertical ring
+    indicatorGroup.add(ring2);
+
+    this.aimIndicator = indicatorGroup as unknown as THREE.Mesh;
     this.aimIndicator.visible = false;
     this.scene.add(this.aimIndicator);
   }
