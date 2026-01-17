@@ -1,20 +1,31 @@
 // Tracks which keys are currently pressed
 export class Input {
   private keys: Set<string> = new Set();
+  private keysJustPressed: Set<string> = new Set();
   private mouseX = 0;
   private mouseY = 0;
   private mouseDeltaX = 0;
   private mouseDeltaY = 0;
   private isPointerLocked = false;
 
+  // Mouse button tracking
+  private mouseButtons: Set<number> = new Set();
+  private mouseButtonsJustPressed: Set<number> = new Set();
+  private mouseButtonsJustReleased: Set<number> = new Set();
+
   constructor() {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('mousemove', this.onMouseMove);
+    window.addEventListener('mousedown', this.onMouseDown);
+    window.addEventListener('mouseup', this.onMouseUp);
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
+    if (!this.keys.has(e.code)) {
+      this.keysJustPressed.add(e.code);
+    }
     this.keys.add(e.code);
   };
 
@@ -33,6 +44,16 @@ export class Input {
 
   private onPointerLockChange = () => {
     this.isPointerLocked = document.pointerLockElement !== null;
+  };
+
+  private onMouseDown = (e: MouseEvent) => {
+    this.mouseButtons.add(e.button);
+    this.mouseButtonsJustPressed.add(e.button);
+  };
+
+  private onMouseUp = (e: MouseEvent) => {
+    this.mouseButtons.delete(e.button);
+    this.mouseButtonsJustReleased.add(e.button);
   };
 
   // Request pointer lock (call on click)
@@ -66,8 +87,45 @@ export class Input {
     return this.isKeyDown('Space');
   }
 
+  get jumpJustPressed(): boolean {
+    return this.keysJustPressed.has('Space');
+  }
+
   get sprint(): boolean {
     return this.isKeyDown('ShiftLeft') || this.isKeyDown('ShiftRight');
+  }
+
+  // Mouse button helpers (0 = left, 1 = middle, 2 = right)
+  isMouseButtonDown(button: number): boolean {
+    return this.mouseButtons.has(button);
+  }
+
+  isMouseButtonJustPressed(button: number): boolean {
+    return this.mouseButtonsJustPressed.has(button);
+  }
+
+  isMouseButtonJustReleased(button: number): boolean {
+    return this.mouseButtonsJustReleased.has(button);
+  }
+
+  // Web swing with left click
+  get webShoot(): boolean {
+    return this.isMouseButtonDown(0);
+  }
+
+  get webShootJustPressed(): boolean {
+    return this.isMouseButtonJustPressed(0);
+  }
+
+  get webShootJustReleased(): boolean {
+    return this.isMouseButtonJustReleased(0);
+  }
+
+  // Call at end of frame to clear just-pressed/released states
+  endFrame() {
+    this.keysJustPressed.clear();
+    this.mouseButtonsJustPressed.clear();
+    this.mouseButtonsJustReleased.clear();
   }
 
   // Get and reset mouse delta (call once per frame)
@@ -87,6 +145,8 @@ export class Input {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mousedown', this.onMouseDown);
+    window.removeEventListener('mouseup', this.onMouseUp);
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);
   }
 }
