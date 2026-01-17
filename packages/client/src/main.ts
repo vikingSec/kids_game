@@ -75,7 +75,7 @@ const webSwing = new WebSwing(scene, thirdPersonCamera.camera);
 const remotePlayers: Map<string, RemotePlayer> = new Map();
 
 // Generate a random player name
-const playerName = `Spider-${Math.floor(Math.random() * 1000)}`;
+let playerName = `Spider-${Math.floor(Math.random() * 1000)}`;
 
 // Network connection
 const SERVER_URL = `ws://${window.location.hostname}:3002`; // Sprint branch uses different port
@@ -290,11 +290,10 @@ document.getElementById('settings-save')?.addEventListener('click', () => {
   const newColor = colorInput.value;
 
   if (newName && newName !== playerName) {
-    // Note: playerName is const, so we update the display only
-    // The server will track the actual name
+    playerName = newName;
     const statusEl = document.getElementById('network-status');
     if (statusEl) {
-      statusEl.textContent = `Connected as ${newName}`;
+      statusEl.textContent = `Connected as ${playerName}`;
     }
   }
 
