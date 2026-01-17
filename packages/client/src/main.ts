@@ -219,6 +219,13 @@ function animate() {
   // Check tree collisions
   checkTreeCollision(player.position, player.velocity);
 
+  // Check terrain collision (player's internal ground check uses y=0, we adjust for terrain)
+  const terrainHeight = technoJungle.getHeightAt(player.position.x, player.position.z);
+  if (player.position.y < terrainHeight) {
+    player.position.y = terrainHeight;
+    player.velocity.y = 0;
+  }
+
   // Update camera to follow player
   thirdPersonCamera.update(player.position, deltaTime);
 

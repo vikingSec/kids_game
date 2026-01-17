@@ -32,6 +32,20 @@ export class TechnoJungle {
     this.createFloatingParticles();
   }
 
+  // Get terrain height at any x,z position (must match createTerrain formula)
+  getHeightAt(x: number, z: number): number {
+    // Same formula as terrain generation
+    const height =
+      Math.sin(x * 0.05) * Math.cos(z * 0.05) * 2 +
+      Math.sin(x * 0.02 + z * 0.03) * 1.5;
+
+    // Keep area near spawn flat
+    const distFromCenter = Math.sqrt(x * x + z * z);
+    const flattenFactor = Math.min(1, distFromCenter / 15);
+
+    return height * flattenFactor;
+  }
+
   private createTerrain() {
     // Main ground with slight height variation
     const groundSize = 200;
@@ -165,7 +179,7 @@ export class TechnoJungle {
     // Add some branches with lights
     this.addTechBranches(group, height, trunkRadius);
 
-    group.position.set(x, 0, z);
+    group.position.set(x, this.getHeightAt(x, z), z);
     this.scene.add(group);
     this.swingableObjects.push(group);
     this.treeColliders.push({ x, z, radius: trunkRadius + 0.5 });
@@ -408,7 +422,7 @@ export class TechnoJungle {
     // Only track one mesh per plant for animation (they share the material)
     this.glowingPlants.push(center);
 
-    group.position.set(x, 0, z);
+    group.position.set(x, this.getHeightAt(x, z), z);
     group.rotation.y = Math.random() * Math.PI * 2;
     group.scale.setScalar(0.8 + Math.random() * 0.6);
     this.scene.add(group);
@@ -490,7 +504,7 @@ export class TechnoJungle {
       group.add(spot);
     }
 
-    group.position.set(x, 0, z);
+    group.position.set(x, this.getHeightAt(x, z), z);
     group.scale.setScalar(scale);
     this.scene.add(group);
   }
@@ -554,7 +568,7 @@ export class TechnoJungle {
       group.add(line);
     }
 
-    group.position.set(x, 0, z);
+    group.position.set(x, this.getHeightAt(x, z), z);
     group.rotation.y = Math.random() * Math.PI;
     this.scene.add(group);
   }
@@ -604,7 +618,7 @@ export class TechnoJungle {
       group.add(part);
     }
 
-    group.position.set(x, 0, z);
+    group.position.set(x, this.getHeightAt(x, z), z);
     group.rotation.y = Math.random() * Math.PI * 2;
     this.scene.add(group);
   }
@@ -636,7 +650,7 @@ export class TechnoJungle {
     orb.position.y = 0.6;
     group.add(orb);
 
-    group.position.set(x, 0, z);
+    group.position.set(x, this.getHeightAt(x, z), z);
     this.scene.add(group);
   }
 
