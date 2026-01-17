@@ -84,16 +84,16 @@ const connection = new Connection(SERVER_URL, {
   onStatusChange: (status: ConnectionStatus) => {
     updateNetworkStatus(status);
   },
-  onWelcome: (yourId: string, existingPlayers: Array<{ id: string; name: string }>) => {
+  onWelcome: (yourId: string, existingPlayers: Array<{ id: string; name: string; color: string }>) => {
     console.log(`[Network] Welcome! Your ID: ${yourId}`);
     // Add existing players
     existingPlayers.forEach(p => {
-      addRemotePlayer(p.id, p.name);
+      addRemotePlayer(p.id, p.name, p.color);
     });
   },
-  onPlayerJoined: (id: string, name: string) => {
+  onPlayerJoined: (id: string, name: string, color: string) => {
     console.log(`[Network] ${name} joined!`);
-    addRemotePlayer(id, name);
+    addRemotePlayer(id, name, color);
   },
   onPlayerLeft: (id: string) => {
     const remote = remotePlayers.get(id);
@@ -113,9 +113,9 @@ const connection = new Connection(SERVER_URL, {
   },
 });
 
-function addRemotePlayer(id: string, name: string): void {
+function addRemotePlayer(id: string, name: string, color: string): void {
   if (remotePlayers.has(id)) return;
-  const remote = new RemotePlayer(id, name);
+  const remote = new RemotePlayer(id, name, color);
   remotePlayers.set(id, remote);
   scene.add(remote.mesh);
 }
@@ -164,11 +164,151 @@ overlay.innerHTML = `
       SPACE - Jump (releases web!)<br>
       MOUSE - Look around<br>
       <span style="color: #00ffff;">LEFT CLICK (hold) - Web Swing!</span><br>
-      <span style="color: #00ff00;">Green dot = aim point</span>
+      <span style="color: #00ff00;">Green dot = aim point</span><br>
+      <span style="color: #ffaa00;">ESC - Settings (color, name)</span>
     </div>
   </div>
 `;
 document.body.appendChild(overlay);
+
+// === SETTINGS MENU ===
+let settingsOpen = false;
+let currentPlayerColor = '#ff4444'; // Default red
+
+const settingsOverlay = document.createElement('div');
+settingsOverlay.id = 'settings-overlay';
+settingsOverlay.style.cssText = `
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+settingsOverlay.innerHTML = `
+  <div style="
+    background: rgba(20, 30, 40, 0.95);
+    padding: 30px;
+    border-radius: 12px;
+    border: 2px solid #00ffff;
+    min-width: 300px;
+    font-family: monospace;
+    color: white;
+  ">
+    <h2 style="margin: 0 0 20px 0; color: #00ffff; text-align: center;">Settings</h2>
+
+    <div style="margin-bottom: 20px;">
+      <label style="display: block; margin-bottom: 8px; color: #aaa;">Player Name:</label>
+      <input type="text" id="settings-name" maxlength="20" value="${playerName}" style="
+        width: 100%;
+        padding: 10px;
+        background: #1a1a1a;
+        border: 1px solid #00ffff;
+        border-radius: 4px;
+        color: white;
+        font-family: monospace;
+        font-size: 14px;
+        box-sizing: border-box;
+      ">
+    </div>
+
+    <div style="margin-bottom: 25px;">
+      <label style="display: block; margin-bottom: 8px; color: #aaa;">Spider Color:</label>
+      <input type="color" id="settings-color" value="${currentPlayerColor}" style="
+        width: 100%;
+        height: 50px;
+        border: 1px solid #00ffff;
+        border-radius: 4px;
+        cursor: pointer;
+        background: #1a1a1a;
+      ">
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button id="settings-save" style="
+        flex: 1;
+        padding: 12px;
+        background: #00ffff;
+        border: none;
+        border-radius: 4px;
+        color: #000;
+        font-family: monospace;
+        font-weight: bold;
+        cursor: pointer;
+      ">Save</button>
+      <button id="settings-cancel" style="
+        flex: 1;
+        padding: 12px;
+        background: #333;
+        border: 1px solid #666;
+        border-radius: 4px;
+        color: white;
+        font-family: monospace;
+        cursor: pointer;
+      ">Cancel</button>
+    </div>
+
+    <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #666;">
+      Press ESC to close
+    </div>
+  </div>
+`;
+document.body.appendChild(settingsOverlay);
+
+function openSettings(): void {
+  settingsOpen = true;
+  settingsOverlay.style.display = 'flex';
+  document.exitPointerLock();
+}
+
+function closeSettings(): void {
+  settingsOpen = false;
+  settingsOverlay.style.display = 'none';
+}
+
+// ESC key to toggle settings
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (settingsOpen) {
+      closeSettings();
+    } else {
+      openSettings();
+    }
+  }
+});
+
+// Settings button handlers
+document.getElementById('settings-save')?.addEventListener('click', () => {
+  const nameInput = document.getElementById('settings-name') as HTMLInputElement;
+  const colorInput = document.getElementById('settings-color') as HTMLInputElement;
+
+  const newName = nameInput.value.trim();
+  const newColor = colorInput.value;
+
+  if (newName && newName !== playerName) {
+    // Note: playerName is const, so we update the display only
+    // The server will track the actual name
+    const statusEl = document.getElementById('network-status');
+    if (statusEl) {
+      statusEl.textContent = `Connected as ${newName}`;
+    }
+  }
+
+  if (newColor !== currentPlayerColor) {
+    currentPlayerColor = newColor;
+    player.setColor(newColor); // Update local player color
+  }
+
+  // Send settings to server
+  connection.sendSettings(newName || undefined, newColor);
+  closeSettings();
+});
+
+document.getElementById('settings-cancel')?.addEventListener('click', closeSettings);
 
 function updateNetworkStatus(status: ConnectionStatus): void {
   const statusEl = document.getElementById('network-status');

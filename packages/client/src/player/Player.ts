@@ -35,24 +35,32 @@ export class Player {
   private eyeGlowMaterial: THREE.MeshStandardMaterial | null = null;
   private bodyGlowRing: THREE.Mesh | null = null;
 
+  // Body material for color customization
+  private bodyMaterial: THREE.MeshStandardMaterial;
+
   constructor(input: Input) {
     this.input = input;
+    this.bodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0xdd1111, // Default red
+      metalness: 0.8,
+      roughness: 0.2,
+    });
     this.mesh = this.createMesh();
+  }
+
+  // Change player color
+  setColor(color: string): void {
+    this.bodyMaterial.color.set(color);
   }
 
   private createMesh(): THREE.Group {
     const group = new THREE.Group();
 
-    // === BODY ===
+    // === BODY (uses customizable color material) ===
     // Main abdomen (larger back section)
     const abdomenGeometry = new THREE.SphereGeometry(0.45, 20, 16);
     abdomenGeometry.scale(1, 0.8, 1.2);
-    const bodyMaterial = new THREE.MeshStandardMaterial({
-      color: 0xdd1111,
-      metalness: 0.8,
-      roughness: 0.2,
-    });
-    const abdomen = new THREE.Mesh(abdomenGeometry, bodyMaterial);
+    const abdomen = new THREE.Mesh(abdomenGeometry, this.bodyMaterial);
     abdomen.position.set(0, 0.5, -0.15);
     abdomen.castShadow = true;
     group.add(abdomen);
@@ -60,7 +68,7 @@ export class Player {
     // Thorax (middle section)
     const thoraxGeometry = new THREE.SphereGeometry(0.35, 16, 12);
     thoraxGeometry.scale(1, 0.9, 0.9);
-    const thorax = new THREE.Mesh(thoraxGeometry, bodyMaterial);
+    const thorax = new THREE.Mesh(thoraxGeometry, this.bodyMaterial);
     thorax.position.set(0, 0.55, 0.2);
     thorax.castShadow = true;
     group.add(thorax);
@@ -81,15 +89,10 @@ export class Player {
     // Tech patterns on abdomen (circuit lines)
     this.addCircuitPattern(group, abdomen.position, 0.45);
 
-    // === HEAD ===
+    // === HEAD (uses same customizable color material) ===
     const headGeometry = new THREE.SphereGeometry(0.22, 14, 10);
     headGeometry.scale(1, 0.9, 1.1);
-    const headMaterial = new THREE.MeshStandardMaterial({
-      color: 0xdd1111,
-      metalness: 0.8,
-      roughness: 0.2,
-    });
-    const head = new THREE.Mesh(headGeometry, headMaterial);
+    const head = new THREE.Mesh(headGeometry, this.bodyMaterial);
     head.position.set(0, 0.7, 0.45);
     head.castShadow = true;
     group.add(head);

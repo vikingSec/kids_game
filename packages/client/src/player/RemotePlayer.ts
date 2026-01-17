@@ -3,7 +3,8 @@ import type { PlayerData, Vector3 } from '@kids-game/shared';
 
 export class RemotePlayer {
   readonly id: string;
-  readonly name: string;
+  name: string;
+  color: string;
   mesh: THREE.Group;
 
   // Interpolation
@@ -18,9 +19,18 @@ export class RemotePlayer {
   // Name label
   private nameSprite: THREE.Sprite | null = null;
 
-  constructor(id: string, name: string) {
+  // Body material for color updates
+  private bodyMaterial: THREE.MeshStandardMaterial;
+
+  constructor(id: string, name: string, color: string) {
     this.id = id;
     this.name = name;
+    this.color = color;
+    this.bodyMaterial = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color),
+      metalness: 0.8,
+      roughness: 0.2,
+    });
     this.mesh = this.createMesh();
     this.webMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     this.createNameLabel();
@@ -30,15 +40,10 @@ export class RemotePlayer {
     const group = new THREE.Group();
 
     // Simplified robot spider (similar to Player but lighter for performance)
-    // === BODY ===
+    // === BODY (uses player's custom color) ===
     const abdomenGeometry = new THREE.SphereGeometry(0.45, 12, 10);
     abdomenGeometry.scale(1, 0.8, 1.2);
-    const bodyMaterial = new THREE.MeshStandardMaterial({
-      color: 0x1177dd, // Blue for other players (vs red for local)
-      metalness: 0.8,
-      roughness: 0.2,
-    });
-    const abdomen = new THREE.Mesh(abdomenGeometry, bodyMaterial);
+    const abdomen = new THREE.Mesh(abdomenGeometry, this.bodyMaterial);
     abdomen.position.set(0, 0.5, -0.15);
     abdomen.castShadow = true;
     group.add(abdomen);
@@ -46,7 +51,7 @@ export class RemotePlayer {
     // Thorax
     const thoraxGeometry = new THREE.SphereGeometry(0.35, 10, 8);
     thoraxGeometry.scale(1, 0.9, 0.9);
-    const thorax = new THREE.Mesh(thoraxGeometry, bodyMaterial);
+    const thorax = new THREE.Mesh(thoraxGeometry, this.bodyMaterial);
     thorax.position.set(0, 0.55, 0.2);
     thorax.castShadow = true;
     group.add(thorax);
@@ -66,7 +71,7 @@ export class RemotePlayer {
     // === HEAD ===
     const headGeometry = new THREE.SphereGeometry(0.22, 10, 8);
     headGeometry.scale(1, 0.9, 1.1);
-    const head = new THREE.Mesh(headGeometry, bodyMaterial);
+    const head = new THREE.Mesh(headGeometry, this.bodyMaterial);
     head.position.set(0, 0.7, 0.45);
     head.castShadow = true;
     group.add(head);
@@ -194,10 +199,23 @@ export class RemotePlayer {
     this.mesh.add(this.nameSprite);
   }
 
+  // Update player color
+  setColor(color: string): void {
+    if (this.color !== color) {
+      this.color = color;
+      this.bodyMaterial.color.set(color);
+    }
+  }
+
   // Update from network data
   updateFromData(data: PlayerData): void {
     this.targetPosition.set(data.x, data.y, data.z);
     this.targetRotationY = data.rotationY;
+
+    // Update color if changed
+    if (data.color !== this.color) {
+      this.setColor(data.color);
+    }
 
     // Update web line if swinging
     if (data.state === 'swinging' && data.swingAttachPoint) {

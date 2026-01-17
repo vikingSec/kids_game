@@ -75,6 +75,15 @@ export class PlayerSession {
           this.gameState.updateSwing(this.id, message.active, message.attachPoint);
         }
         break;
+      case 'settings':
+        if (this.joined) {
+          this.gameState.updateSettings(this.id, message.name, message.color);
+          // Update local name if changed
+          if (message.name) {
+            this.name = message.name;
+          }
+        }
+        break;
     }
   }
 
@@ -88,7 +97,7 @@ export class PlayerSession {
     }
 
     this.name = name || `Player ${this.id.slice(0, 4)}`;
-    this.gameState.addPlayer(this.id, this.name);
+    const player = this.gameState.addPlayer(this.id, this.name);
     this.joined = true;
 
     console.log(`[${this.id}] ${this.name} joined (${this.gameState.playerCount} players)`);
@@ -101,11 +110,12 @@ export class PlayerSession {
     };
     this.send(welcome);
 
-    // Notify other players
+    // Notify other players (include color from the newly created player)
     const joinMsg: PlayerJoinedMessage = {
       type: 'player_joined',
       id: this.id,
       name: this.name,
+      color: player.color,
     };
     this.broadcast(joinMsg, this.id);
   }
