@@ -16,6 +16,11 @@ export class TechnoJungle {
   // Tree collision data
   treeColliders: Array<{ x: number; z: number; radius: number }> = [];
 
+  // Terrain for raycasting
+  private groundMesh: THREE.Mesh | null = null;
+  private raycaster = new THREE.Raycaster();
+  private downVector = new THREE.Vector3(0, -1, 0);
+
   // Animated elements
   private glowingPlants: THREE.Mesh[] = [];
   private mushrooms: THREE.Mesh[] = [];
@@ -32,44 +37,44 @@ export class TechnoJungle {
     this.createFloatingParticles();
   }
 
-  // Get terrain height at any x,z position (must match createTerrain formula)
+  // Get terrain height at any x,z position using raycast (accurate to visual mesh)
   getHeightAt(x: number, z: number): number {
-    // PlaneGeometry Y becomes -Z after rotation, so negate z to match
-    const gz = -z;
+    if (!this.groundMesh) return 0;
 
-    // Gentle rolling hills (reduced amplitude for less clipping)
-    const height =
-      Math.sin(x * 0.03) * Math.cos(gz * 0.03) * 1.0 +
-      Math.sin(x * 0.015 + gz * 0.02) * 0.8;
+    // Cast ray from high above straight down
+    const origin = new THREE.Vector3(x, 50, z);
+    this.raycaster.set(origin, this.downVector);
 
-    // Keep area near spawn flat
-    const distFromCenter = Math.sqrt(x * x + z * z);
-    const flattenFactor = Math.min(1, distFromCenter / 20);
+    const intersects = this.raycaster.intersectObject(this.groundMesh);
+    if (intersects.length > 0) {
+      return intersects[0].point.y;
+    }
 
-    return height * flattenFactor;
+    return 0; // Fallback if no hit
   }
 
   private createTerrain() {
-    // Main ground with slight height variation
+    // Main ground with height variation
     const groundSize = 200;
-    const segments = 100; // Higher resolution for smoother terrain
+    const segments = 80; // Good balance of detail vs performance
     const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize, segments, segments);
 
-    // Add gentle hills
+    // Add rolling hills - can be more dramatic now that we use raycasting
     const positions = groundGeometry.attributes.position;
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i);
       const gz = positions.getY(i); // geometry Y = -worldZ after rotation
 
-      // Gentle rolling hills (reduced amplitude)
+      // More interesting terrain with multiple frequencies
       const height =
-        Math.sin(x * 0.03) * Math.cos(gz * 0.03) * 1.0 +
-        Math.sin(x * 0.015 + gz * 0.02) * 0.8;
+        Math.sin(x * 0.04) * Math.cos(gz * 0.04) * 2.5 +
+        Math.sin(x * 0.02 + gz * 0.025) * 1.5 +
+        Math.sin(x * 0.08) * Math.cos(gz * 0.06) * 0.5;
 
       // Keep area near spawn flat
       const worldZ = -gz;
       const distFromCenter = Math.sqrt(x * x + worldZ * worldZ);
-      const flattenFactor = Math.min(1, distFromCenter / 20);
+      const flattenFactor = Math.min(1, distFromCenter / 15);
 
       positions.setZ(i, height * flattenFactor);
     }
@@ -86,6 +91,9 @@ export class TechnoJungle {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
+
+    // Store reference for raycasting
+    this.groundMesh = ground;
 
     // Add glowing grid lines on ground (tech feel)
     this.createGroundGrid();
