@@ -110,8 +110,11 @@ export class TechnoJungle {
   getHeightAt(x: number, z: number): number {
     if (!this.groundMesh) return 0;
 
+    // Ensure the ground mesh has up-to-date world matrix for accurate raycasting
+    this.groundMesh.updateMatrixWorld(true);
+
     // Cast ray from high above straight down
-    const origin = new THREE.Vector3(x, 50, z);
+    const origin = new THREE.Vector3(x, 100, z);
     this.raycaster.set(origin, this.downVector);
 
     const intersects = this.raycaster.intersectObject(this.groundMesh);
@@ -171,6 +174,9 @@ export class TechnoJungle {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
+
+    // Ensure world matrix is computed for accurate raycasting
+    ground.updateMatrixWorld(true);
 
     // Store reference for raycasting
     this.groundMesh = ground;
