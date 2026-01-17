@@ -8,6 +8,9 @@ import type {
   PositionUpdate,
   SwingUpdate,
   SettingsUpdate,
+  RTCOfferMessage,
+  RTCAnswerMessage,
+  RTCIceCandidateMessage,
 } from '@kids-game/shared';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'full';
@@ -18,6 +21,10 @@ export interface ConnectionEvents {
   onPlayerJoined: (id: string, name: string, color: string) => void;
   onPlayerLeft: (id: string) => void;
   onGameState: (players: PlayerData[]) => void;
+  // WebRTC signaling callbacks (optional - only used if voice chat is enabled)
+  onRTCOffer?: (fromId: string, offer: RTCSessionDescriptionInit) => void;
+  onRTCAnswer?: (fromId: string, answer: RTCSessionDescriptionInit) => void;
+  onRTCIceCandidate?: (fromId: string, candidate: RTCIceCandidateInit) => void;
 }
 
 export class Connection {
@@ -105,6 +112,19 @@ export class Connection {
         console.log('[Network] Server is full!');
         this.setStatus('full');
         break;
+
+      // WebRTC signaling
+      case 'rtc_offer':
+        this.events.onRTCOffer?.(message.fromId, message.offer);
+        break;
+
+      case 'rtc_answer':
+        this.events.onRTCAnswer?.(message.fromId, message.answer);
+        break;
+
+      case 'rtc_ice':
+        this.events.onRTCIceCandidate?.(message.fromId, message.candidate);
+        break;
     }
   }
 
@@ -160,6 +180,34 @@ export class Connection {
       type: 'settings',
       name,
       color,
+    };
+    this.send(msg);
+  }
+
+  // WebRTC signaling methods
+  sendRTCOffer(targetId: string, offer: RTCSessionDescriptionInit): void {
+    const msg: RTCOfferMessage = {
+      type: 'rtc_offer',
+      targetId,
+      offer,
+    };
+    this.send(msg);
+  }
+
+  sendRTCAnswer(targetId: string, answer: RTCSessionDescriptionInit): void {
+    const msg: RTCAnswerMessage = {
+      type: 'rtc_answer',
+      targetId,
+      answer,
+    };
+    this.send(msg);
+  }
+
+  sendRTCIceCandidate(targetId: string, candidate: RTCIceCandidateInit): void {
+    const msg: RTCIceCandidateMessage = {
+      type: 'rtc_ice',
+      targetId,
+      candidate,
     };
     this.send(msg);
   }

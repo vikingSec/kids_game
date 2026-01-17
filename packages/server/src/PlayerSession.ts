@@ -7,6 +7,9 @@ import type {
   PlayerJoinedMessage,
   PlayerLeftMessage,
   ServerFullMessage,
+  RTCOfferRelayMessage,
+  RTCAnswerRelayMessage,
+  RTCIceCandidateRelayMessage,
 } from '@kids-game/shared';
 import { GameState } from './GameState';
 
@@ -15,6 +18,7 @@ export class PlayerSession {
   private ws: WebSocket;
   private gameState: GameState;
   private broadcast: (message: ServerMessage, excludeId?: string) => void;
+  private sendToPlayer: (targetId: string, message: ServerMessage) => void;
   private onDisconnect: (id: string) => void;
   private name: string = 'Player';
   private joined: boolean = false;
@@ -23,12 +27,14 @@ export class PlayerSession {
     ws: WebSocket,
     gameState: GameState,
     broadcast: (message: ServerMessage, excludeId?: string) => void,
+    sendToPlayer: (targetId: string, message: ServerMessage) => void,
     onDisconnect: (id: string) => void
   ) {
     this.id = uuidv4();
     this.ws = ws;
     this.gameState = gameState;
     this.broadcast = broadcast;
+    this.sendToPlayer = sendToPlayer;
     this.onDisconnect = onDisconnect;
 
     this.setupHandlers();
@@ -82,6 +88,40 @@ export class PlayerSession {
           if (message.name) {
             this.name = message.name;
           }
+        }
+        break;
+
+      // WebRTC signaling relay
+      case 'rtc_offer':
+        if (this.joined) {
+          const relayOffer: RTCOfferRelayMessage = {
+            type: 'rtc_offer',
+            fromId: this.id,
+            offer: message.offer,
+          };
+          this.sendToPlayer(message.targetId, relayOffer);
+        }
+        break;
+
+      case 'rtc_answer':
+        if (this.joined) {
+          const relayAnswer: RTCAnswerRelayMessage = {
+            type: 'rtc_answer',
+            fromId: this.id,
+            answer: message.answer,
+          };
+          this.sendToPlayer(message.targetId, relayAnswer);
+        }
+        break;
+
+      case 'rtc_ice':
+        if (this.joined) {
+          const relayIce: RTCIceCandidateRelayMessage = {
+            type: 'rtc_ice',
+            fromId: this.id,
+            candidate: message.candidate,
+          };
+          this.sendToPlayer(message.targetId, relayIce);
         }
         break;
     }

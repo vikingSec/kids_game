@@ -30,7 +30,33 @@ export interface SettingsUpdate {
   color?: string; // Optional new color (hex)
 }
 
-export type ClientMessage = JoinMessage | PositionUpdate | SwingUpdate | SettingsUpdate;
+// WebRTC signaling messages
+export interface RTCOfferMessage {
+  type: 'rtc_offer';
+  targetId: string;
+  offer: RTCSessionDescriptionInit;
+}
+
+export interface RTCAnswerMessage {
+  type: 'rtc_answer';
+  targetId: string;
+  answer: RTCSessionDescriptionInit;
+}
+
+export interface RTCIceCandidateMessage {
+  type: 'rtc_ice';
+  targetId: string;
+  candidate: RTCIceCandidateInit;
+}
+
+export type ClientMessage =
+  | JoinMessage
+  | PositionUpdate
+  | SwingUpdate
+  | SettingsUpdate
+  | RTCOfferMessage
+  | RTCAnswerMessage
+  | RTCIceCandidateMessage;
 
 // ============================================
 // Server -> Client Messages
@@ -63,9 +89,31 @@ export interface ServerFullMessage {
   type: 'server_full';
 }
 
+// Relayed WebRTC signaling messages (from another player)
+export interface RTCOfferRelayMessage {
+  type: 'rtc_offer';
+  fromId: string;
+  offer: RTCSessionDescriptionInit;
+}
+
+export interface RTCAnswerRelayMessage {
+  type: 'rtc_answer';
+  fromId: string;
+  answer: RTCSessionDescriptionInit;
+}
+
+export interface RTCIceCandidateRelayMessage {
+  type: 'rtc_ice';
+  fromId: string;
+  candidate: RTCIceCandidateInit;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | PlayerJoinedMessage
   | PlayerLeftMessage
   | GameStateMessage
-  | ServerFullMessage;
+  | ServerFullMessage
+  | RTCOfferRelayMessage
+  | RTCAnswerRelayMessage
+  | RTCIceCandidateRelayMessage;
