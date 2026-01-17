@@ -207,6 +207,23 @@ export class RemotePlayer {
     }
   }
 
+  // Update player name and recreate label
+  setName(name: string): void {
+    if (this.name !== name) {
+      this.name = name;
+      // Remove old label
+      if (this.nameSprite) {
+        const material = this.nameSprite.material as THREE.SpriteMaterial;
+        material.map?.dispose();
+        material.dispose();
+        this.mesh.remove(this.nameSprite);
+        this.nameSprite = null;
+      }
+      // Create new label
+      this.createNameLabel();
+    }
+  }
+
   // Update from network data
   updateFromData(data: PlayerData): void {
     this.targetPosition.set(data.x, data.y, data.z);
@@ -215,6 +232,11 @@ export class RemotePlayer {
     // Update color if changed
     if (data.color !== this.color) {
       this.setColor(data.color);
+    }
+
+    // Update name if changed
+    if (data.name !== this.name) {
+      this.setName(data.name);
     }
 
     // Update web line if swinging
