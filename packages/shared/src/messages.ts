@@ -24,7 +24,13 @@ export interface SwingUpdate {
   attachPoint?: Vector3;
 }
 
-export type ClientMessage = JoinMessage | PositionUpdate | SwingUpdate;
+export interface SettingsUpdate {
+  type: 'settings';
+  name?: string; // Optional new name
+  color?: string; // Optional new color (hex)
+}
+
+export type ClientMessage = JoinMessage | PositionUpdate | SwingUpdate | SettingsUpdate;
 
 // ============================================
 // Server -> Client Messages
@@ -33,13 +39,14 @@ export type ClientMessage = JoinMessage | PositionUpdate | SwingUpdate;
 export interface WelcomeMessage {
   type: 'welcome';
   yourId: string;
-  players: Array<{ id: string; name: string }>;
+  players: Array<{ id: string; name: string; color: string }>;
 }
 
 export interface PlayerJoinedMessage {
   type: 'player_joined';
   id: string;
   name: string;
+  color: string;
 }
 
 export interface PlayerLeftMessage {

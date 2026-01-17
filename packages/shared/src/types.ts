@@ -12,6 +12,7 @@ export interface Vector3 {
 export interface PlayerData {
   id: string;
   name: string;
+  color: string; // Hex color like "#ff0000"
   x: number;
   y: number;
   z: number;
