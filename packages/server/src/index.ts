@@ -5,7 +5,7 @@ import type { ServerMessage, GameStateMessage } from '@kids-game/shared';
 import { GameState } from './GameState';
 import { PlayerSession } from './PlayerSession';
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3002; // Sprint branch uses different port
 const BROADCAST_INTERVAL = 50; // 20Hz = every 50ms
 
 // Express for health check

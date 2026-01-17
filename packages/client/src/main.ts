@@ -78,7 +78,7 @@ const remotePlayers: Map<string, RemotePlayer> = new Map();
 const playerName = `Spider-${Math.floor(Math.random() * 1000)}`;
 
 // Network connection
-const SERVER_URL = `ws://${window.location.hostname}:3001`;
+const SERVER_URL = `ws://${window.location.hostname}:3002`; // Sprint branch uses different port
 
 const connection = new Connection(SERVER_URL, {
   onStatusChange: (status: ConnectionStatus) => {
