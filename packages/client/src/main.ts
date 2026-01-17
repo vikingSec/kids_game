@@ -236,7 +236,7 @@ function animate() {
   if (input.pointerLocked) {
     // Start swinging
     if (input.webShootJustPressed && !webSwing.swinging) {
-      const attached = webSwing.tryAttach(player.position, swingableObjects);
+      const attached = webSwing.tryAttach(player.position, player.velocity, swingableObjects);
       if (attached) {
         player.setSwinging(true);
       }
