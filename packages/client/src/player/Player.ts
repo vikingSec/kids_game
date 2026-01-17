@@ -420,12 +420,19 @@ export class Player {
     this.mesh.position.y += this.velocity.y * deltaTime;
     this.mesh.position.z += this.velocity.z * deltaTime;
 
-    // Ground collision (simple floor at y=0)
-    if (this.mesh.position.y < 0) {
-      this.mesh.position.y = 0;
+    // Note: Ground collision is now handled externally via checkGroundCollision()
+  }
+
+  // Call this after update() with the terrain height at player position
+  checkGroundCollision(groundHeight: number) {
+    if (this.mesh.position.y < groundHeight) {
+      this.mesh.position.y = groundHeight;
       this.velocity.y = 0;
       this.isGrounded = true;
       this.isSwinging = false;
+    } else if (this.mesh.position.y > groundHeight + 0.1) {
+      // Small threshold to avoid flickering
+      this.isGrounded = false;
     }
   }
 
