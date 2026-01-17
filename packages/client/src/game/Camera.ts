@@ -62,8 +62,20 @@ export class ThirdPersonCamera {
       playerPosition.z + offsetZ
     );
 
+    // Prevent camera from going below ground
+    const minCameraHeight = 1.0;
+    if (this.targetPosition.y < minCameraHeight) {
+      this.targetPosition.y = minCameraHeight;
+    }
+
     // Smooth camera movement
     this.currentPosition.lerp(this.targetPosition, 0.1);
+
+    // Also clamp the smoothed position to prevent lerping through ground
+    if (this.currentPosition.y < minCameraHeight) {
+      this.currentPosition.y = minCameraHeight;
+    }
+
     this.camera.position.copy(this.currentPosition);
 
     // Look at player (slightly above center)

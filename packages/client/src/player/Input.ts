@@ -1,6 +1,7 @@
 // Tracks which keys are currently pressed
 export class Input {
   private keys: Set<string> = new Set();
+  private keysJustPressed: Set<string> = new Set();
   private mouseX = 0;
   private mouseY = 0;
   private mouseDeltaX = 0;
@@ -22,6 +23,9 @@ export class Input {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
+    if (!this.keys.has(e.code)) {
+      this.keysJustPressed.add(e.code);
+    }
     this.keys.add(e.code);
   };
 
@@ -83,6 +87,10 @@ export class Input {
     return this.isKeyDown('Space');
   }
 
+  get jumpJustPressed(): boolean {
+    return this.keysJustPressed.has('Space');
+  }
+
   get sprint(): boolean {
     return this.isKeyDown('ShiftLeft') || this.isKeyDown('ShiftRight');
   }
@@ -115,6 +123,7 @@ export class Input {
 
   // Call at end of frame to clear just-pressed/released states
   endFrame() {
+    this.keysJustPressed.clear();
     this.mouseButtonsJustPressed.clear();
     this.mouseButtonsJustReleased.clear();
   }

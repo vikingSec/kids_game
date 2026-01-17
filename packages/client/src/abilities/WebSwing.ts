@@ -1,14 +1,16 @@
 import * as THREE from 'three';
-import { Input } from '../player/Input';
 
 export class WebSwing {
   private scene: THREE.Scene;
   private camera: THREE.Camera;
-  private input: Input;
 
-  // Web line visual
-  private webLine: THREE.Line | null = null;
-  private webMaterial: THREE.LineBasicMaterial;
+  // Web line visual (cylinder for thickness)
+  private webMesh: THREE.Mesh | null = null;
+  private webMaterial: THREE.MeshBasicMaterial;
+
+  // Aim indicator
+  private aimIndicator: THREE.Mesh | null = null;
+  private aimIndicatorMaterial: THREE.MeshBasicMaterial;
 
   // Swing state
   private isSwinging = false;
@@ -19,66 +21,91 @@ export class WebSwing {
   private raycaster = new THREE.Raycaster();
 
   // Swing settings
-  private readonly MAX_ROPE_LENGTH = 30;
+  private readonly MAX_ROPE_LENGTH = 35;
   private readonly MIN_ROPE_LENGTH = 3;
-  private readonly SWING_GRAVITY = 25;
-  private readonly AIR_RESISTANCE = 0.02;
+  private readonly SWING_TENSION = 40; // Force pulling toward attach point
+  private readonly SWING_GRAVITY = 20;
 
-  constructor(scene: THREE.Scene, camera: THREE.Camera, input: Input) {
+  constructor(scene: THREE.Scene, camera: THREE.Camera) {
     this.scene = scene;
     this.camera = camera;
-    this.input = input;
 
-    // Glowing cyan web material
-    this.webMaterial = new THREE.LineBasicMaterial({
-      color: 0x00ffff,
-      linewidth: 2,
+    // White web material
+    this.webMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
     });
+
+    // Aim indicator material (glowing green)
+    this.aimIndicatorMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.7,
+    });
+
+    // Create aim indicator (small sphere)
+    const indicatorGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+    this.aimIndicator = new THREE.Mesh(indicatorGeometry, this.aimIndicatorMaterial);
+    this.aimIndicator.visible = false;
+    this.scene.add(this.aimIndicator);
   }
 
-  // Try to attach web to something in front of the camera
-  tryAttach(
-    playerPosition: THREE.Vector3,
-    swingableObjects: THREE.Object3D[]
-  ): boolean {
-    // Cast ray from camera center (where player is aiming)
-    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+  // Update aim indicator to show where web will attach
+  updateAimIndicator(playerPosition: THREE.Vector3, swingableObjects: THREE.Object3D[]): THREE.Vector3 | null {
+    if (this.isSwinging) {
+      if (this.aimIndicator) this.aimIndicator.visible = false;
+      return null;
+    }
 
+    // Cast ray from camera center
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     const intersects = this.raycaster.intersectObjects(swingableObjects, true);
 
     if (intersects.length > 0) {
       const hit = intersects[0];
-
-      // Check if it's within range
       const distance = hit.point.distanceTo(playerPosition);
+
+      if (distance <= this.MAX_ROPE_LENGTH && distance >= this.MIN_ROPE_LENGTH) {
+        // Show indicator at hit point
+        if (this.aimIndicator) {
+          this.aimIndicator.position.copy(hit.point);
+          this.aimIndicator.visible = true;
+          this.aimIndicatorMaterial.color.setHex(0x00ff00); // Green = valid
+        }
+        return hit.point.clone();
+      } else {
+        // Too far or too close
+        if (this.aimIndicator) {
+          this.aimIndicator.position.copy(hit.point);
+          this.aimIndicator.visible = true;
+          this.aimIndicatorMaterial.color.setHex(0xff0000); // Red = invalid
+        }
+        return null;
+      }
+    }
+
+    // No hit - hide indicator
+    if (this.aimIndicator) this.aimIndicator.visible = false;
+    return null;
+  }
+
+  // Try to attach web to the aim point
+  tryAttach(playerPosition: THREE.Vector3, swingableObjects: THREE.Object3D[]): boolean {
+    // Cast ray from camera center
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const intersects = this.raycaster.intersectObjects(swingableObjects, true);
+
+    if (intersects.length > 0) {
+      const hit = intersects[0];
+      const distance = hit.point.distanceTo(playerPosition);
+
       if (distance <= this.MAX_ROPE_LENGTH && distance >= this.MIN_ROPE_LENGTH) {
         this.attachPoint.copy(hit.point);
         this.ropeLength = distance;
         this.isSwinging = true;
-        this.createWebLine(playerPosition);
-        return true;
-      }
-    }
+        this.createWebMesh(playerPosition);
 
-    // If no object hit, try to attach to a point in the air ahead
-    // This makes it easier for kids to swing even without perfect aim
-    const fallbackDistance = 15;
-    const direction = new THREE.Vector3();
-    this.raycaster.ray.direction.normalize();
-    direction.copy(this.raycaster.ray.direction);
-
-    // Only attach if aiming somewhat upward
-    if (direction.y > -0.3) {
-      const fallbackPoint = new THREE.Vector3()
-        .copy(playerPosition)
-        .add(direction.multiplyScalar(fallbackDistance));
-
-      // Make sure the attach point is above the player
-      if (fallbackPoint.y > playerPosition.y + 2) {
-        this.attachPoint.copy(fallbackPoint);
-        this.ropeLength = fallbackDistance;
-        this.isSwinging = true;
-        this.createWebLine(playerPosition);
+        // Hide aim indicator while swinging
+        if (this.aimIndicator) this.aimIndicator.visible = false;
         return true;
       }
     }
@@ -86,40 +113,55 @@ export class WebSwing {
     return false;
   }
 
-  private createWebLine(playerPosition: THREE.Vector3) {
-    // Remove old web line if exists
-    this.removeWebLine();
+  private createWebMesh(playerPosition: THREE.Vector3) {
+    this.removeWebMesh();
 
-    // Create new web line
-    const points = [playerPosition.clone(), this.attachPoint.clone()];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    this.webLine = new THREE.Line(geometry, this.webMaterial);
-    this.scene.add(this.webLine);
+    // Create a cylinder for the web (thicker than a line)
+    const geometry = new THREE.CylinderGeometry(0.05, 0.05, 1, 6);
+    // Rotate so it points along Y by default, we'll orient it each frame
+    geometry.rotateX(Math.PI / 2);
+
+    this.webMesh = new THREE.Mesh(geometry, this.webMaterial);
+    this.updateWebMesh(playerPosition);
+    this.scene.add(this.webMesh);
   }
 
-  private updateWebLine(playerPosition: THREE.Vector3) {
-    if (this.webLine) {
-      const positions = this.webLine.geometry.attributes.position;
-      positions.setXYZ(0, playerPosition.x, playerPosition.y + 0.5, playerPosition.z);
-      positions.setXYZ(1, this.attachPoint.x, this.attachPoint.y, this.attachPoint.z);
-      positions.needsUpdate = true;
-    }
+  private updateWebMesh(playerPosition: THREE.Vector3) {
+    if (!this.webMesh) return;
+
+    const start = new THREE.Vector3(
+      playerPosition.x,
+      playerPosition.y + 0.5,
+      playerPosition.z
+    );
+    const end = this.attachPoint;
+
+    // Position at midpoint
+    const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+    this.webMesh.position.copy(midpoint);
+
+    // Scale to length
+    const length = start.distanceTo(end);
+    this.webMesh.scale.set(1, 1, length);
+
+    // Orient toward attach point
+    this.webMesh.lookAt(end);
   }
 
-  private removeWebLine() {
-    if (this.webLine) {
-      this.scene.remove(this.webLine);
-      this.webLine.geometry.dispose();
-      this.webLine = null;
+  private removeWebMesh() {
+    if (this.webMesh) {
+      this.scene.remove(this.webMesh);
+      this.webMesh.geometry.dispose();
+      this.webMesh = null;
     }
   }
 
   detach() {
     this.isSwinging = false;
-    this.removeWebLine();
+    this.removeWebMesh();
   }
 
-  // Apply swing physics and return the new velocity
+  // Apply swing physics - this is the key fix for pulling the player up
   update(
     playerPosition: THREE.Vector3,
     velocity: THREE.Vector3,
@@ -129,50 +171,49 @@ export class WebSwing {
       return velocity;
     }
 
-    // Update web line visual
-    this.updateWebLine(playerPosition);
+    // Update web visual
+    this.updateWebMesh(playerPosition);
 
-    // Vector from attach point to player
-    const toPlayer = new THREE.Vector3().subVectors(playerPosition, this.attachPoint);
-    const currentDistance = toPlayer.length();
+    // Vector from player to attach point (direction we should be pulled)
+    const toAttach = new THREE.Vector3().subVectors(this.attachPoint, playerPosition);
+    const currentDistance = toAttach.length();
+    const ropeDirection = toAttach.clone().normalize();
 
-    // Normalize for direction
-    const ropeDirection = toPlayer.clone().normalize();
-
-    // Apply gravity
+    // Apply gravity (but less than normal - the web supports some weight)
     velocity.y -= this.SWING_GRAVITY * deltaTime;
 
-    // Apply air resistance
-    velocity.multiplyScalar(1 - this.AIR_RESISTANCE);
-
-    // Pendulum constraint: if we're past the rope length, pull back
+    // KEY FIX: If we're beyond the rope length, pull back toward attach point
     if (currentDistance > this.ropeLength) {
-      // Project velocity onto the rope direction and remove the component
-      // that would take us further from the attach point
-      const velocityAlongRope = ropeDirection.dot(velocity);
+      // Calculate how much we've overextended
+      const overExtension = currentDistance - this.ropeLength;
 
-      if (velocityAlongRope > 0) {
-        // Moving away from attach point, constrain
-        velocity.sub(ropeDirection.clone().multiplyScalar(velocityAlongRope));
+      // Apply strong tension force toward attach point
+      const tensionForce = ropeDirection.clone().multiplyScalar(this.SWING_TENSION * deltaTime);
+      velocity.add(tensionForce);
+
+      // Also add an immediate correction to prevent going further
+      const correctionStrength = Math.min(overExtension, 0.5);
+      const correction = ropeDirection.clone().multiplyScalar(correctionStrength);
+      playerPosition.add(correction);
+
+      // Remove velocity component that's moving away from attach point
+      const awayVelocity = ropeDirection.dot(velocity);
+      if (awayVelocity < 0) {
+        velocity.sub(ropeDirection.clone().multiplyScalar(awayVelocity * 0.8));
       }
-
-      // Snap position back to rope length
-      const correction = ropeDirection.clone().multiplyScalar(currentDistance - this.ropeLength);
-      playerPosition.sub(correction);
     }
 
-    // Add a slight pull toward the swing arc (makes it feel more dynamic)
+    // Add slight centripetal acceleration for smoother swinging
+    // This gives a nice arc feeling
     const tangent = new THREE.Vector3()
-      .crossVectors(ropeDirection, new THREE.Vector3(0, 1, 0))
+      .crossVectors(new THREE.Vector3(0, 1, 0), ropeDirection)
       .normalize();
 
-    // Determine swing direction based on current velocity
-    const swingDirection = tangent.dot(velocity) > 0 ? 1 : -1;
-
-    // Add centripetal boost when at bottom of swing
-    if (ropeDirection.y < 0.3) {
-      const boost = Math.abs(ropeDirection.y) * 2 * deltaTime;
-      velocity.add(tangent.clone().multiplyScalar(boost * swingDirection));
+    if (tangent.length() > 0.1) {
+      // Add a small force in the swing direction based on current velocity
+      const swingSpeed = tangent.dot(velocity);
+      const centripetalBoost = (swingSpeed * swingSpeed) / Math.max(currentDistance, 1) * deltaTime;
+      velocity.add(ropeDirection.clone().multiplyScalar(centripetalBoost * 0.5));
     }
 
     return velocity;
@@ -187,7 +228,12 @@ export class WebSwing {
   }
 
   dispose() {
-    this.removeWebLine();
+    this.removeWebMesh();
     this.webMaterial.dispose();
+    if (this.aimIndicator) {
+      this.scene.remove(this.aimIndicator);
+      this.aimIndicator.geometry.dispose();
+    }
+    this.aimIndicatorMaterial.dispose();
   }
 }
