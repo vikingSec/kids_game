@@ -22,8 +22,9 @@ export class WebSwing {
   private raycaster = new THREE.Raycaster();
 
   // Swing settings
-  private readonly MAX_ROPE_LENGTH = 40;
-  private readonly MIN_ROPE_LENGTH = 3;
+  private readonly MAX_ROPE_LENGTH = 60; // Increased for easier swinging
+  private readonly MIN_ROPE_LENGTH = 2; // Reduced to allow closer attachments
+  private readonly SNAP_TO_NEAREST_DISTANCE = 15; // How far from aim to snap to nearest tree
   private readonly SWING_TENSION = 50; // Force pulling toward attach point
   private readonly SWING_GRAVITY = 12; // Much lower gravity while swinging
   private readonly ROPE_RETRACT_SPEED = 3; // How fast rope shortens to pull you up
@@ -50,6 +51,82 @@ export class WebSwing {
     this.aimIndicator = new THREE.Mesh(indicatorGeometry, this.aimIndicatorMaterial);
     this.aimIndicator.visible = false;
     this.scene.add(this.aimIndicator);
+  }
+
+  // Find the nearest swingable object when direct raycast misses
+  private findNearestSwingable(
+    playerPosition: THREE.Vector3,
+    aimDirection: THREE.Vector3,
+    swingableObjects: THREE.Object3D[]
+  ): { object: THREE.Object3D; distance: number } | null {
+    let nearest: { object: THREE.Object3D; distance: number } | null = null;
+
+    for (const obj of swingableObjects) {
+      const objPos = new THREE.Vector3();
+      obj.getWorldPosition(objPos);
+
+      // Check if object is in front of player and roughly in aim direction
+      const toObj = new THREE.Vector3().subVectors(objPos, playerPosition);
+      const distance = toObj.length();
+
+      // Skip if too far or too close
+      if (distance > this.MAX_ROPE_LENGTH || distance < this.MIN_ROPE_LENGTH) continue;
+
+      // Check angle from aim direction (dot product)
+      toObj.normalize();
+      const aimDot = aimDirection.dot(toObj);
+
+      // Must be roughly in front (within ~45 degrees)
+      if (aimDot < 0.7) continue;
+
+      // Calculate perpendicular distance from aim ray
+      const cross = new THREE.Vector3().crossVectors(aimDirection, toObj);
+      const perpDistance = cross.length() * distance;
+
+      // Check if within snap distance
+      if (perpDistance < this.SNAP_TO_NEAREST_DISTANCE) {
+        if (!nearest || distance < nearest.distance) {
+          nearest = { object: obj, distance };
+        }
+      }
+    }
+
+    return nearest;
+  }
+
+  // Find the high point on a tree group (used for snap-to-nearest)
+  private findHighPointOnTree(treeGroup: THREE.Object3D, playerPosition: THREE.Vector3): THREE.Vector3 | null {
+    let highestY = -Infinity;
+    let highPoint: THREE.Vector3 | null = null;
+    const treeCenter = new THREE.Vector3();
+    treeGroup.getWorldPosition(treeCenter);
+
+    treeGroup.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const worldPos = new THREE.Vector3();
+        child.getWorldPosition(worldPos);
+        if (worldPos.y > highestY) {
+          highestY = worldPos.y;
+          highPoint = worldPos.clone();
+        }
+      }
+    });
+
+    if (highPoint) {
+      // Aim for a point near the top but not at the very top
+      const finalPoint = new THREE.Vector3(
+        treeCenter.x,
+        highestY - 2,
+        treeCenter.z
+      );
+
+      const distance = finalPoint.distanceTo(playerPosition);
+      if (distance <= this.MAX_ROPE_LENGTH && distance >= this.MIN_ROPE_LENGTH) {
+        return finalPoint;
+      }
+    }
+
+    return null;
   }
 
   // Find a high attach point on the tree (near the glowing top)
@@ -106,36 +183,44 @@ export class WebSwing {
     this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     const intersects = this.raycaster.intersectObjects(swingableObjects, true);
 
+    let attachPoint: THREE.Vector3 | null = null;
+
     if (intersects.length > 0) {
       const hit = intersects[0];
-
       // Find high attach point on this tree
-      const attachPoint = this.findHighAttachPoint(hit, playerPosition);
-
-      if (attachPoint) {
-        const distance = attachPoint.distanceTo(playerPosition);
-
-        if (distance <= this.MAX_ROPE_LENGTH && distance >= this.MIN_ROPE_LENGTH) {
-          // Show indicator at the HIGH attach point
-          if (this.aimIndicator) {
-            this.aimIndicator.position.copy(attachPoint);
-            this.aimIndicator.visible = true;
-            this.aimIndicatorMaterial.color.setHex(0x00ff00); // Green = valid
-          }
-          return attachPoint;
-        } else {
-          // Too far or too close
-          if (this.aimIndicator) {
-            this.aimIndicator.position.copy(attachPoint);
-            this.aimIndicator.visible = true;
-            this.aimIndicatorMaterial.color.setHex(0xff0000); // Red = invalid
-          }
-          return null;
-        }
+      attachPoint = this.findHighAttachPoint(hit, playerPosition);
+    } else {
+      // No direct hit - try to snap to nearest tree
+      const aimDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      const nearest = this.findNearestSwingable(playerPosition, aimDirection, swingableObjects);
+      if (nearest) {
+        attachPoint = this.findHighPointOnTree(nearest.object, playerPosition);
       }
     }
 
-    // No hit - hide indicator
+    if (attachPoint) {
+      const distance = attachPoint.distanceTo(playerPosition);
+
+      if (distance <= this.MAX_ROPE_LENGTH && distance >= this.MIN_ROPE_LENGTH) {
+        // Show indicator at the attach point
+        if (this.aimIndicator) {
+          this.aimIndicator.position.copy(attachPoint);
+          this.aimIndicator.visible = true;
+          this.aimIndicatorMaterial.color.setHex(0x00ff00); // Green = valid
+        }
+        return attachPoint;
+      } else {
+        // Too far or too close
+        if (this.aimIndicator) {
+          this.aimIndicator.position.copy(attachPoint);
+          this.aimIndicator.visible = true;
+          this.aimIndicatorMaterial.color.setHex(0xff0000); // Red = invalid
+        }
+        return null;
+      }
+    }
+
+    // No hit and no snap target - hide indicator
     if (this.aimIndicator) this.aimIndicator.visible = false;
     return null;
   }
@@ -146,34 +231,42 @@ export class WebSwing {
     this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     const intersects = this.raycaster.intersectObjects(swingableObjects, true);
 
+    let attachPoint: THREE.Vector3 | null = null;
+
     if (intersects.length > 0) {
       const hit = intersects[0];
-
       // Find high attach point
-      const attachPoint = this.findHighAttachPoint(hit, playerPosition);
+      attachPoint = this.findHighAttachPoint(hit, playerPosition);
+    } else {
+      // No direct hit - try to snap to nearest tree
+      const aimDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      const nearest = this.findNearestSwingable(playerPosition, aimDirection, swingableObjects);
+      if (nearest) {
+        attachPoint = this.findHighPointOnTree(nearest.object, playerPosition);
+      }
+    }
 
-      if (attachPoint) {
-        const distance = attachPoint.distanceTo(playerPosition);
+    if (attachPoint) {
+      const distance = attachPoint.distanceTo(playerPosition);
 
-        if (distance <= this.MAX_ROPE_LENGTH && distance >= this.MIN_ROPE_LENGTH) {
-          this.attachPoint.copy(attachPoint);
-          this.ropeLength = distance;
-          this.initialRopeLength = distance;
-          this.isSwinging = true;
-          this.createWebMesh(playerPosition);
+      if (distance <= this.MAX_ROPE_LENGTH && distance >= this.MIN_ROPE_LENGTH) {
+        this.attachPoint.copy(attachPoint);
+        this.ropeLength = distance;
+        this.initialRopeLength = distance;
+        this.isSwinging = true;
+        this.createWebMesh(playerPosition);
 
-          // Hide aim indicator while swinging
-          if (this.aimIndicator) this.aimIndicator.visible = false;
+        // Hide aim indicator while swinging
+        if (this.aimIndicator) this.aimIndicator.visible = false;
 
-          // Give initial boost toward/up to the attach point!
-          const toAttach = new THREE.Vector3().subVectors(attachPoint, playerPosition).normalize();
-          // Add upward and forward momentum
-          velocity.x += toAttach.x * 5;
-          velocity.y += Math.max(5, toAttach.y * 8); // Always boost up at least a bit
-          velocity.z += toAttach.z * 5;
+        // Give initial boost toward/up to the attach point!
+        const toAttach = new THREE.Vector3().subVectors(attachPoint, playerPosition).normalize();
+        // Add upward and forward momentum
+        velocity.x += toAttach.x * 5;
+        velocity.y += Math.max(5, toAttach.y * 8); // Always boost up at least a bit
+        velocity.z += toAttach.z * 5;
 
-          return true;
-        }
+        return true;
       }
     }
 
