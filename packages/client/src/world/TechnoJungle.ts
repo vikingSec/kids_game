@@ -26,6 +26,7 @@ export class TechnoJungle {
   private mushrooms: THREE.Mesh[] = [];
   private circuitLines: THREE.Line[] = [];
   private torches: THREE.Mesh[] = []; // Flame meshes for animation
+  private torchPositions: THREE.Vector3[] = []; // For baking lighting
   private time = 0;
 
   constructor(scene: THREE.Scene) {
@@ -35,6 +36,7 @@ export class TechnoJungle {
     this.createGlowingPlants();
     this.createMushrooms();
     this.createTorches();
+    this.bakeTorchLighting(); // Bake torch light into ground vertex colors
     this.createTallGrass();
     this.createFerns();
     this.createFlowers();
@@ -85,12 +87,23 @@ export class TechnoJungle {
     }
     groundGeometry.computeVertexNormals();
 
-    // Ground material - darker green with tech tint
+    // Ground material - darker green with tech tint, vertex colors for baked lighting
     const groundMaterial = new THREE.MeshStandardMaterial({
       color: 0x1a3a1a,
       roughness: 0.9,
       metalness: 0.1,
+      vertexColors: true,
     });
+
+    // Initialize vertex colors to base color (will be modified by torch baking)
+    const vertexCount = groundGeometry.attributes.position.count;
+    const colors = new Float32Array(vertexCount * 3);
+    for (let i = 0; i < vertexCount; i++) {
+      colors[i * 3] = 1;     // R
+      colors[i * 3 + 1] = 1; // G
+      colors[i * 3 + 2] = 1; // B
+    }
+    groundGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotation.x = -Math.PI / 2;
@@ -99,6 +112,9 @@ export class TechnoJungle {
 
     // Store reference for raycasting
     this.groundMesh = ground;
+
+    // IMPORTANT: Update world matrix so raycasting works correctly
+    ground.updateMatrixWorld(true);
 
     // Add glowing grid lines on ground (tech feel)
     this.createGroundGrid();
@@ -595,8 +611,61 @@ export class TechnoJungle {
     innerFlame.position.y = 1.35;
     group.add(innerFlame);
 
-    group.position.set(x, this.getHeightAt(x, z), z);
+    const height = this.getHeightAt(x, z);
+    group.position.set(x, height, z);
     this.scene.add(group);
+
+    // Store position for baked lighting
+    this.torchPositions.push(new THREE.Vector3(x, height, z));
+  }
+
+  // Bake torch lighting into ground mesh vertex colors
+  private bakeTorchLighting() {
+    if (!this.groundMesh) return;
+
+    const geometry = this.groundMesh.geometry as THREE.PlaneGeometry;
+    const positions = geometry.attributes.position;
+    const colors = geometry.attributes.color;
+
+    const lightRadius = 10; // How far the light reaches
+    const lightIntensity = 1.0; // Max brightness boost
+
+    for (let i = 0; i < positions.count; i++) {
+      // Get world position of this vertex (plane is rotated -90 on X)
+      const localX = positions.getX(i);
+      const localY = positions.getY(i);
+      const worldX = localX;
+      const worldZ = -localY; // Y becomes -Z after rotation
+
+      // Calculate light contribution from all torches
+      let totalLight = 0;
+      for (const torchPos of this.torchPositions) {
+        const dx = worldX - torchPos.x;
+        const dz = worldZ - torchPos.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (dist < lightRadius) {
+          // Smooth falloff
+          const falloff = 1 - (dist / lightRadius);
+          totalLight += falloff * falloff * lightIntensity;
+        }
+      }
+
+      // Clamp total light
+      totalLight = Math.min(totalLight, 1);
+
+      // Vertex colors multiply with material color (which is dark green 0x1a3a1a)
+      // So we need to boost significantly to make orange visible
+      // Base is 1,1,1 (white) which gives the normal material color
+      // Adding orange: boost red a lot, green a bit, reduce blue
+      const r = 1 + totalLight * 4;    // Boost red significantly
+      const g = 1 + totalLight * 1.5;  // Boost green a bit (for warmth)
+      const b = 1 - totalLight * 0.3;  // Slightly reduce blue
+
+      colors.setXYZ(i, r, g, b);
+    }
+
+    colors.needsUpdate = true;
   }
 
   private createTallGrass() {
