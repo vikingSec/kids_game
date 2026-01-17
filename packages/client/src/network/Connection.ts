@@ -7,14 +7,15 @@ import type {
   JoinMessage,
   PositionUpdate,
   SwingUpdate,
+  SettingsUpdate,
 } from '@kids-game/shared';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'full';
 
 export interface ConnectionEvents {
   onStatusChange: (status: ConnectionStatus) => void;
-  onWelcome: (yourId: string, existingPlayers: Array<{ id: string; name: string }>) => void;
-  onPlayerJoined: (id: string, name: string) => void;
+  onWelcome: (yourId: string, existingPlayers: Array<{ id: string; name: string; color: string }>) => void;
+  onPlayerJoined: (id: string, name: string, color: string) => void;
   onPlayerLeft: (id: string) => void;
   onGameState: (players: PlayerData[]) => void;
 }
@@ -87,7 +88,7 @@ export class Connection {
         break;
 
       case 'player_joined':
-        this.events.onPlayerJoined(message.id, message.name);
+        this.events.onPlayerJoined(message.id, message.name, message.color);
         break;
 
       case 'player_left':
@@ -149,6 +150,16 @@ export class Connection {
       type: 'swing',
       active,
       attachPoint,
+    };
+    this.send(msg);
+  }
+
+  // Send settings update (name, color)
+  sendSettings(name?: string, color?: string): void {
+    const msg: SettingsUpdate = {
+      type: 'settings',
+      name,
+      color,
     };
     this.send(msg);
   }
