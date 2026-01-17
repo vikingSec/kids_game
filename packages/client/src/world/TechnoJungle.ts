@@ -29,6 +29,24 @@ export class TechnoJungle {
   private torchPositions: THREE.Vector3[] = []; // For baking lighting
   private time = 0;
 
+  // Entities
+  private animals: Array<{
+    mesh: THREE.Group;
+    targetX: number;
+    targetZ: number;
+    speed: number;
+    waitTime: number;
+  }> = [];
+  private npcs: Array<{
+    mesh: THREE.Group;
+    targetX: number;
+    targetZ: number;
+    speed: number;
+    waitTime: number;
+  }> = [];
+  private pumpkins: THREE.Group[] = [];
+  private cars: THREE.Group[] = [];
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.createSky();
@@ -43,6 +61,10 @@ export class TechnoJungle {
     this.createFlowers();
     this.createTechDebris();
     this.createFloatingParticles();
+    this.createAnimals();
+    this.createNPCs();
+    this.createPumpkins();
+    this.createCars();
   }
 
   private createSky() {
@@ -1072,6 +1094,397 @@ export class TechnoJungle {
     this.scene.add(particles);
   }
 
+  // === ENTITIES ===
+  private createAnimals() {
+    // Create 18 wandering animals of different types
+    const animalTypes = ['dog', 'cat', 'squirrel', 'tiger', 'dino'];
+
+    for (let i = 0; i < 18; i++) {
+      const x = (Math.random() - 0.5) * 300;
+      const z = (Math.random() - 0.5) * 300;
+
+      // Don't spawn at origin
+      if (Math.sqrt(x * x + z * z) < 20) continue;
+
+      const type = animalTypes[Math.floor(Math.random() * animalTypes.length)];
+      this.addAnimal(x, z, type);
+    }
+  }
+
+  private addAnimal(x: number, z: number, type: string) {
+    const group = new THREE.Group();
+    const height = this.getHeightAt(x, z);
+
+    // Different colors/sizes based on type
+    let bodyColor = 0x8b4513;
+    let size = 1;
+
+    switch (type) {
+      case 'dog':
+        bodyColor = 0x8b6914;
+        size = 0.8;
+        break;
+      case 'cat':
+        bodyColor = 0x888888;
+        size = 0.6;
+        break;
+      case 'squirrel':
+        bodyColor = 0xa0522d;
+        size = 0.4;
+        break;
+      case 'tiger':
+        bodyColor = 0xff8c00;
+        size = 1.2;
+        break;
+      case 'dino':
+        bodyColor = 0x228b22;
+        size = 1.5;
+        break;
+    }
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: bodyColor,
+      roughness: 0.8,
+    });
+
+    // Body (ellipsoid)
+    const bodyGeometry = new THREE.SphereGeometry(0.4 * size, 8, 6);
+    bodyGeometry.scale(1.5, 1, 1);
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.position.y = 0.4 * size;
+    body.castShadow = true;
+    group.add(body);
+
+    // Head
+    const headGeometry = new THREE.SphereGeometry(0.25 * size, 8, 6);
+    const head = new THREE.Mesh(headGeometry, bodyMaterial);
+    head.position.set(0.5 * size, 0.5 * size, 0);
+    head.castShadow = true;
+    group.add(head);
+
+    // Eyes
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const eyeGeometry = new THREE.SphereGeometry(0.05 * size, 6, 6);
+    const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    leftEye.position.set(0.65 * size, 0.55 * size, 0.1 * size);
+    group.add(leftEye);
+    const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    rightEye.position.set(0.65 * size, 0.55 * size, -0.1 * size);
+    group.add(rightEye);
+
+    // Legs (4)
+    const legGeometry = new THREE.CylinderGeometry(0.06 * size, 0.06 * size, 0.3 * size, 6);
+    const legPositions = [
+      { x: 0.3 * size, z: 0.15 * size },
+      { x: 0.3 * size, z: -0.15 * size },
+      { x: -0.3 * size, z: 0.15 * size },
+      { x: -0.3 * size, z: -0.15 * size },
+    ];
+    legPositions.forEach(pos => {
+      const leg = new THREE.Mesh(legGeometry, bodyMaterial);
+      leg.position.set(pos.x, 0.15 * size, pos.z);
+      group.add(leg);
+    });
+
+    // Tail
+    const tailGeometry = new THREE.CylinderGeometry(0.03 * size, 0.05 * size, 0.4 * size, 6);
+    const tail = new THREE.Mesh(tailGeometry, bodyMaterial);
+    tail.position.set(-0.6 * size, 0.4 * size, 0);
+    tail.rotation.z = Math.PI / 4;
+    group.add(tail);
+
+    group.position.set(x, height, z);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    this.scene.add(group);
+
+    this.animals.push({
+      mesh: group,
+      targetX: x,
+      targetZ: z,
+      speed: 2 + Math.random() * 2,
+      waitTime: 0,
+    });
+  }
+
+  private createNPCs() {
+    // Create 6 wandering NPCs (humanoid robots)
+    for (let i = 0; i < 6; i++) {
+      const x = (Math.random() - 0.5) * 250;
+      const z = (Math.random() - 0.5) * 250;
+
+      if (Math.sqrt(x * x + z * z) < 25) continue;
+
+      this.addNPC(x, z);
+    }
+  }
+
+  private addNPC(x: number, z: number) {
+    const group = new THREE.Group();
+    const height = this.getHeightAt(x, z);
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4466aa,
+      roughness: 0.3,
+      metalness: 0.7,
+    });
+
+    const accentMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00ffff,
+      emissive: 0x00ffff,
+      emissiveIntensity: 0.3,
+    });
+
+    // Torso
+    const torsoGeometry = new THREE.BoxGeometry(0.6, 0.8, 0.4);
+    const torso = new THREE.Mesh(torsoGeometry, bodyMaterial);
+    torso.position.y = 1.2;
+    torso.castShadow = true;
+    group.add(torso);
+
+    // Head
+    const headGeometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+    const head = new THREE.Mesh(headGeometry, bodyMaterial);
+    head.position.y = 1.85;
+    head.castShadow = true;
+    group.add(head);
+
+    // Visor (glowing)
+    const visorGeometry = new THREE.BoxGeometry(0.35, 0.1, 0.05);
+    const visor = new THREE.Mesh(visorGeometry, accentMaterial);
+    visor.position.set(0, 1.9, 0.2);
+    group.add(visor);
+
+    // Arms
+    const armGeometry = new THREE.BoxGeometry(0.15, 0.6, 0.15);
+    const leftArm = new THREE.Mesh(armGeometry, bodyMaterial);
+    leftArm.position.set(-0.45, 1.1, 0);
+    group.add(leftArm);
+    const rightArm = new THREE.Mesh(armGeometry, bodyMaterial);
+    rightArm.position.set(0.45, 1.1, 0);
+    group.add(rightArm);
+
+    // Legs
+    const legGeometry = new THREE.BoxGeometry(0.2, 0.7, 0.2);
+    const leftLeg = new THREE.Mesh(legGeometry, bodyMaterial);
+    leftLeg.position.set(-0.15, 0.35, 0);
+    group.add(leftLeg);
+    const rightLeg = new THREE.Mesh(legGeometry, bodyMaterial);
+    rightLeg.position.set(0.15, 0.35, 0);
+    group.add(rightLeg);
+
+    group.position.set(x, height, z);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    this.scene.add(group);
+
+    this.npcs.push({
+      mesh: group,
+      targetX: x,
+      targetZ: z,
+      speed: 1 + Math.random(),
+      waitTime: 0,
+    });
+  }
+
+  private createPumpkins() {
+    // Create 25 collectible pumpkins
+    for (let i = 0; i < 25; i++) {
+      const x = (Math.random() - 0.5) * 350;
+      const z = (Math.random() - 0.5) * 350;
+
+      if (Math.sqrt(x * x + z * z) < 15) continue;
+
+      this.addPumpkin(x, z);
+    }
+  }
+
+  private addPumpkin(x: number, z: number) {
+    const group = new THREE.Group();
+    const height = this.getHeightAt(x, z);
+
+    // Pumpkin body
+    const pumpkinMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff6600,
+      emissive: 0xff4400,
+      emissiveIntensity: 0.3,
+      roughness: 0.7,
+    });
+
+    const bodyGeometry = new THREE.SphereGeometry(0.5, 12, 10);
+    bodyGeometry.scale(1, 0.8, 1);
+    const body = new THREE.Mesh(bodyGeometry, pumpkinMaterial);
+    body.position.y = 0.4;
+    body.castShadow = true;
+    group.add(body);
+
+    // Stem
+    const stemGeometry = new THREE.CylinderGeometry(0.05, 0.08, 0.2, 6);
+    const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x2d5a27 });
+    const stem = new THREE.Mesh(stemGeometry, stemMaterial);
+    stem.position.y = 0.8;
+    group.add(stem);
+
+    // Carved face (glowing)
+    const faceMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffff00,
+      emissive: 0xffaa00,
+      emissiveIntensity: 0.8,
+    });
+
+    // Eyes (triangles approximated with small boxes)
+    const eyeGeometry = new THREE.BoxGeometry(0.12, 0.12, 0.1);
+    const leftEye = new THREE.Mesh(eyeGeometry, faceMaterial);
+    leftEye.position.set(-0.15, 0.5, 0.45);
+    leftEye.rotation.z = Math.PI / 4;
+    group.add(leftEye);
+    const rightEye = new THREE.Mesh(eyeGeometry, faceMaterial);
+    rightEye.position.set(0.15, 0.5, 0.45);
+    rightEye.rotation.z = Math.PI / 4;
+    group.add(rightEye);
+
+    // Mouth
+    const mouthGeometry = new THREE.BoxGeometry(0.3, 0.08, 0.1);
+    const mouth = new THREE.Mesh(mouthGeometry, faceMaterial);
+    mouth.position.set(0, 0.3, 0.45);
+    group.add(mouth);
+
+    group.position.set(x, height, z);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    this.scene.add(group);
+
+    this.pumpkins.push(group);
+  }
+
+  private createCars() {
+    // Create 8 static cars scattered around
+    const carPositions = [
+      { x: 30, z: 20 },
+      { x: -40, z: 35 },
+      { x: 60, z: -45 },
+      { x: -55, z: -30 },
+      { x: 75, z: 65 },
+      { x: -85, z: 50 },
+      { x: 45, z: -75 },
+      { x: -65, z: -70 },
+    ];
+
+    const carColors = [0xff0000, 0x0066ff, 0x00aa00, 0xffff00, 0xff00ff, 0x00ffff, 0xffffff, 0x333333];
+
+    carPositions.forEach((pos, i) => {
+      this.addCar(pos.x, pos.z, carColors[i % carColors.length]);
+    });
+  }
+
+  private addCar(x: number, z: number, color: number) {
+    const group = new THREE.Group();
+    const height = this.getHeightAt(x, z);
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.3,
+      metalness: 0.6,
+    });
+
+    const darkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      roughness: 0.5,
+    });
+
+    const glassMaterial = new THREE.MeshStandardMaterial({
+      color: 0x88ccff,
+      roughness: 0.1,
+      metalness: 0.3,
+      transparent: true,
+      opacity: 0.7,
+    });
+
+    // Car body (lower)
+    const lowerBodyGeometry = new THREE.BoxGeometry(4, 0.8, 2);
+    const lowerBody = new THREE.Mesh(lowerBodyGeometry, bodyMaterial);
+    lowerBody.position.y = 0.6;
+    lowerBody.castShadow = true;
+    group.add(lowerBody);
+
+    // Car body (upper/cabin)
+    const upperBodyGeometry = new THREE.BoxGeometry(2, 0.7, 1.8);
+    const upperBody = new THREE.Mesh(upperBodyGeometry, bodyMaterial);
+    upperBody.position.set(-0.3, 1.35, 0);
+    upperBody.castShadow = true;
+    group.add(upperBody);
+
+    // Windshield
+    const windshieldGeometry = new THREE.BoxGeometry(0.1, 0.5, 1.6);
+    const windshield = new THREE.Mesh(windshieldGeometry, glassMaterial);
+    windshield.position.set(0.65, 1.25, 0);
+    windshield.rotation.z = -0.3;
+    group.add(windshield);
+
+    // Rear window
+    const rearWindowGeometry = new THREE.BoxGeometry(0.1, 0.5, 1.6);
+    const rearWindow = new THREE.Mesh(rearWindowGeometry, glassMaterial);
+    rearWindow.position.set(-1.25, 1.25, 0);
+    rearWindow.rotation.z = 0.3;
+    group.add(rearWindow);
+
+    // Wheels (4)
+    const wheelGeometry = new THREE.CylinderGeometry(0.35, 0.35, 0.2, 12);
+    const wheelPositions = [
+      { x: 1.2, z: 1.1 },
+      { x: 1.2, z: -1.1 },
+      { x: -1.2, z: 1.1 },
+      { x: -1.2, z: -1.1 },
+    ];
+    wheelPositions.forEach(pos => {
+      const wheel = new THREE.Mesh(wheelGeometry, darkMaterial);
+      wheel.position.set(pos.x, 0.35, pos.z);
+      wheel.rotation.x = Math.PI / 2;
+      wheel.castShadow = true;
+      group.add(wheel);
+    });
+
+    // Headlights
+    const headlightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffcc,
+      emissive: 0xffffcc,
+      emissiveIntensity: 0.5,
+    });
+    const headlightGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+    const leftHeadlight = new THREE.Mesh(headlightGeometry, headlightMaterial);
+    leftHeadlight.position.set(2, 0.6, 0.6);
+    group.add(leftHeadlight);
+    const rightHeadlight = new THREE.Mesh(headlightGeometry, headlightMaterial);
+    rightHeadlight.position.set(2, 0.6, -0.6);
+    group.add(rightHeadlight);
+
+    group.position.set(x, height, z);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    this.scene.add(group);
+
+    this.cars.push(group);
+
+    // Add collision (approximate with circle)
+    this.treeColliders.push({ x, z, radius: 2.5 });
+  }
+
+  // Check if player is near a pumpkin and collect it
+  collectPumpkin(playerX: number, playerZ: number): boolean {
+    const collectRadius = 1.5;
+
+    for (let i = this.pumpkins.length - 1; i >= 0; i--) {
+      const pumpkin = this.pumpkins[i];
+      const dx = playerX - pumpkin.position.x;
+      const dz = playerZ - pumpkin.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      if (dist < collectRadius) {
+        // Remove pumpkin
+        this.scene.remove(pumpkin);
+        this.pumpkins.splice(i, 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // Call each frame to animate glowing elements (optimized - only update a few per frame)
   update(deltaTime: number) {
     this.time += deltaTime;
@@ -1110,6 +1523,53 @@ export class TechnoJungle {
     }
 
     // Circuit lines don't need per-frame animation - static glow is fine
+
+    // Update wandering animals
+    this.updateWanderers(this.animals, deltaTime);
+
+    // Update wandering NPCs
+    this.updateWanderers(this.npcs, deltaTime);
+  }
+
+  private updateWanderers(
+    entities: Array<{ mesh: THREE.Group; targetX: number; targetZ: number; speed: number; waitTime: number }>,
+    deltaTime: number
+  ) {
+    for (const entity of entities) {
+      // If waiting, count down
+      if (entity.waitTime > 0) {
+        entity.waitTime -= deltaTime;
+        continue;
+      }
+
+      const mesh = entity.mesh;
+      const dx = entity.targetX - mesh.position.x;
+      const dz = entity.targetZ - mesh.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      if (dist < 1) {
+        // Reached target, pick new random target and wait
+        entity.targetX = mesh.position.x + (Math.random() - 0.5) * 30;
+        entity.targetZ = mesh.position.z + (Math.random() - 0.5) * 30;
+
+        // Clamp to world bounds
+        entity.targetX = Math.max(-180, Math.min(180, entity.targetX));
+        entity.targetZ = Math.max(-180, Math.min(180, entity.targetZ));
+
+        entity.waitTime = 1 + Math.random() * 3; // Wait 1-4 seconds
+      } else {
+        // Move toward target
+        const moveX = (dx / dist) * entity.speed * deltaTime;
+        const moveZ = (dz / dist) * entity.speed * deltaTime;
+
+        mesh.position.x += moveX;
+        mesh.position.z += moveZ;
+        mesh.position.y = this.getHeightAt(mesh.position.x, mesh.position.z);
+
+        // Face movement direction
+        mesh.rotation.y = Math.atan2(dx, dz);
+      }
+    }
   }
 
   dispose() {

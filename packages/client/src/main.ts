@@ -137,6 +137,9 @@ const NETWORK_UPDATE_INTERVAL = 100; // ms
 let lastNetworkUpdate = 0;
 let wasSwinging = false;
 
+// Pumpkin score
+let pumpkinScore = 0;
+
 // UI overlay for instructions
 const overlay = document.createElement('div');
 overlay.id = 'overlay';
@@ -170,6 +173,30 @@ overlay.innerHTML = `
   </div>
 `;
 document.body.appendChild(overlay);
+
+// === PUMPKIN SCORE UI ===
+const scoreOverlay = document.createElement('div');
+scoreOverlay.id = 'score-overlay';
+scoreOverlay.innerHTML = `
+  <div style="
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    color: white;
+    font-family: monospace;
+    font-size: 16px;
+    background: rgba(0,0,0,0.6);
+    padding: 15px 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 102, 0, 0.5);
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+  ">
+    <div style="color: #ff6600; text-shadow: 0 0 10px #ff6600;">🎃 Pumpkins</div>
+    <div id="pumpkin-score" style="font-size: 24px; color: #ffaa00; text-align: center;">0</div>
+  </div>
+`;
+document.body.appendChild(scoreOverlay);
 
 // === SETTINGS MENU ===
 let settingsOpen = false;
@@ -473,6 +500,13 @@ function animate() {
   // Check terrain collision
   const terrainHeight = technoJungle.getHeightAt(player.position.x, player.position.z);
   player.checkGroundCollision(terrainHeight);
+
+  // Check pumpkin collection
+  if (technoJungle.collectPumpkin(player.position.x, player.position.z)) {
+    pumpkinScore++;
+    const scoreEl = document.getElementById('pumpkin-score');
+    if (scoreEl) scoreEl.textContent = pumpkinScore.toString();
+  }
 
   // Update camera to follow player
   thirdPersonCamera.update(player.position, deltaTime);
