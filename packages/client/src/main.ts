@@ -3,118 +3,59 @@ import { Input } from './player/Input';
 import { Player } from './player/Player';
 import { ThirdPersonCamera } from './game/Camera';
 import { WebSwing } from './abilities/WebSwing';
+import { TechnoJungle } from './world/TechnoJungle';
 
 // Scene setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
+scene.background = new THREE.Color(0x1a2a3a);
 
-// Fog for atmosphere
-scene.fog = new THREE.Fog(0x1a1a2e, 20, 100);
+// Lighter fog for atmosphere without making it too dark
+scene.fog = new THREE.FogExp2(0x1a2a3a, 0.008);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.5;
 document.getElementById('app')!.appendChild(renderer.domElement);
 
-// Lighting
-const ambientLight = new THREE.AmbientLight(0x404060, 0.4);
+// === LIGHTING (brighter for better visibility) ===
+// Ambient light - brighter
+const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffee, 1);
-directionalLight.position.set(20, 40, 20);
-directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.width = 2048;
-directionalLight.shadow.mapSize.height = 2048;
-directionalLight.shadow.camera.near = 0.5;
-directionalLight.shadow.camera.far = 100;
-directionalLight.shadow.camera.left = -30;
-directionalLight.shadow.camera.right = 30;
-directionalLight.shadow.camera.top = 30;
-directionalLight.shadow.camera.bottom = -30;
-scene.add(directionalLight);
+// Hemisphere light - sky to ground color gradient
+const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x2d5a27, 0.5);
+scene.add(hemisphereLight);
 
-// Add some colored point lights for techno-jungle feel
-const pointLight1 = new THREE.PointLight(0x00ff88, 0.5, 20);
-pointLight1.position.set(10, 3, 10);
-scene.add(pointLight1);
+// Main directional light (sun/moon)
+const sunLight = new THREE.DirectionalLight(0xffffee, 1.0);
+sunLight.position.set(30, 50, 20);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 120;
+sunLight.shadow.camera.left = -50;
+sunLight.shadow.camera.right = 50;
+sunLight.shadow.camera.top = 50;
+sunLight.shadow.camera.bottom = -50;
+scene.add(sunLight);
 
-const pointLight2 = new THREE.PointLight(0x8800ff, 0.5, 20);
-pointLight2.position.set(-10, 3, -10);
-scene.add(pointLight2);
+// Just a couple accent point lights near spawn (not many for performance)
+const accentLight1 = new THREE.PointLight(0x00ff88, 0.6, 25);
+accentLight1.position.set(8, 4, 8);
+scene.add(accentLight1);
 
-// Ground plane
-const groundGeometry = new THREE.PlaneGeometry(200, 200);
-const groundMaterial = new THREE.MeshStandardMaterial({
-  color: 0x2d5a27,
-  roughness: 0.8,
-});
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
+const accentLight2 = new THREE.PointLight(0xff00ff, 0.4, 20);
+accentLight2.position.set(-8, 4, -8);
+scene.add(accentLight2);
 
-// Swingable objects (trees/pillars that web can attach to)
-const swingableObjects: THREE.Object3D[] = [];
-
-// Tree collision data (position and radius)
-const treeColliders: Array<{ x: number; z: number; radius: number }> = [];
-
-// Add tall trees/pillars for swinging
-const addSwingableTree = (x: number, z: number, height: number) => {
-  const group = new THREE.Group();
-
-  const trunkRadius = 0.7;
-
-  // Trunk
-  const trunkGeometry = new THREE.CylinderGeometry(0.5, trunkRadius, height, 8);
-  const trunkMaterial = new THREE.MeshStandardMaterial({
-    color: 0x4a3728,
-    roughness: 0.9,
-  });
-  const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-  trunk.position.y = height / 2;
-  trunk.castShadow = true;
-  trunk.receiveShadow = true;
-  group.add(trunk);
-
-  // Glowing top (like a techno-jungle canopy)
-  const topGeometry = new THREE.SphereGeometry(1.5, 8, 6);
-  const topMaterial = new THREE.MeshStandardMaterial({
-    color: 0x00ff66,
-    emissive: 0x00ff66,
-    emissiveIntensity: 0.2,
-    roughness: 0.5,
-  });
-  const top = new THREE.Mesh(topGeometry, topMaterial);
-  top.position.y = height + 0.5;
-  top.castShadow = true;
-  group.add(top);
-
-  group.position.set(x, 0, z);
-  scene.add(group);
-  swingableObjects.push(group);
-
-  // Add collision data
-  treeColliders.push({ x, z, radius: trunkRadius + 0.5 }); // Add player radius
-
-  return group;
-};
-
-// Create a forest of swingable trees - taller and more spread out
-for (let i = 0; i < 40; i++) {
-  const angle = (i / 40) * Math.PI * 2;
-  const radius = 15 + Math.random() * 50;
-  const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 20;
-  const z = Math.sin(angle) * radius + (Math.random() - 0.5) * 20;
-
-  // Don't place too close to spawn
-  if (Math.abs(x) > 8 || Math.abs(z) > 8) {
-    const height = 12 + Math.random() * 10; // Taller trees for better swinging
-    addSwingableTree(x, z, height);
-  }
-}
+// === WORLD ===
+const technoJungle = new TechnoJungle(scene);
 
 // Input and Player
 const input = new Input();
@@ -138,12 +79,14 @@ overlay.innerHTML = `
     color: white;
     font-family: monospace;
     font-size: 14px;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0,0,0,0.6);
     padding: 15px;
     border-radius: 8px;
+    border: 1px solid rgba(0, 255, 136, 0.3);
     pointer-events: none;
+    backdrop-filter: blur(4px);
   ">
-    <div style="font-size: 18px; margin-bottom: 10px; color: #00ffff;">🕷️ Robot Spiderman</div>
+    <div style="font-size: 18px; margin-bottom: 10px; color: #00ffff; text-shadow: 0 0 10px #00ffff;">Robot Spiderman</div>
     <div id="instructions">Click to start!</div>
     <div style="margin-top: 10px; font-size: 12px; opacity: 0.7;">
       WASD - Move<br>
@@ -174,7 +117,7 @@ window.addEventListener('resize', () => {
 function checkTreeCollision(position: THREE.Vector3, velocity: THREE.Vector3): void {
   const playerRadius = 0.5;
 
-  for (const tree of treeColliders) {
+  for (const tree of technoJungle.treeColliders) {
     const dx = position.x - tree.x;
     const dz = position.z - tree.z;
     const distSq = dx * dx + dz * dz;
@@ -209,12 +152,15 @@ function animate() {
   requestAnimationFrame(animate);
 
   const currentTime = performance.now();
-  const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1); // Cap at 100ms
+  const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
   lastTime = currentTime;
+
+  // Update world animations (glowing plants, circuit pulses, etc.)
+  technoJungle.update(deltaTime);
 
   // Update aim indicator (shows where web will attach)
   if (input.pointerLocked && !webSwing.swinging) {
-    webSwing.updateAimIndicator(player.position, swingableObjects);
+    webSwing.updateAimIndicator(player.position, technoJungle.swingableObjects);
   }
 
   // Update instructions based on state
@@ -236,7 +182,11 @@ function animate() {
   if (input.pointerLocked) {
     // Start swinging
     if (input.webShootJustPressed && !webSwing.swinging) {
-      const attached = webSwing.tryAttach(player.position, player.velocity, swingableObjects);
+      const attached = webSwing.tryAttach(
+        player.position,
+        player.velocity,
+        technoJungle.swingableObjects
+      );
       if (attached) {
         player.setSwinging(true);
       }
@@ -269,6 +219,10 @@ function animate() {
   // Check tree collisions
   checkTreeCollision(player.position, player.velocity);
 
+  // Check terrain collision
+  const terrainHeight = technoJungle.getHeightAt(player.position.x, player.position.z);
+  player.checkGroundCollision(terrainHeight);
+
   // Update camera to follow player
   thirdPersonCamera.update(player.position, deltaTime);
 
@@ -282,4 +236,4 @@ function animate() {
 animate();
 
 console.log('Robot Spiderman: Techno-Jungle Adventure loaded!');
-console.log('Click the game, use WASD to move, and hold LEFT CLICK to web swing!');
+console.log('Explore the bioluminescent forest and swing between the trees!');
