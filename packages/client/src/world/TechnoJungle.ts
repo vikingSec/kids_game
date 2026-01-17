@@ -13,8 +13,11 @@ export class TechnoJungle {
   // Swingable objects for web attachment
   swingableObjects: THREE.Object3D[] = [];
 
-  // Tree collision data
+  // Tree collision data (also includes building walls)
   treeColliders: Array<{ x: number; z: number; radius: number }> = [];
+
+  // Building colliders (rectangular)
+  buildingColliders: Array<{ x: number; z: number; width: number; depth: number }> = [];
 
   // Terrain for raycasting
   private groundMesh: THREE.Mesh | null = null;
@@ -34,6 +37,8 @@ export class TechnoJungle {
     this.createSky();
     this.createTerrain();
     this.createTrees();
+    this.createRuins();
+    this.createBuildings();
     this.createGlowingPlants();
     this.createMushrooms();
     this.createTorches();
@@ -457,6 +462,441 @@ export class TechnoJungle {
         group.add(orb);
       }
     }
+  }
+
+  // === RUINS ===
+  private createRuins() {
+    // Scatter ancient ruins around the world (6 sites)
+    const ruinPositions = [
+      { x: 60, z: 60 },
+      { x: -70, z: 40 },
+      { x: 50, z: -80 },
+      { x: -60, z: -60 },
+      { x: 80, z: -20 },
+      { x: -40, z: 70 },
+    ];
+
+    ruinPositions.forEach(pos => {
+      this.addRuin(pos.x, pos.z);
+    });
+  }
+
+  private addRuin(x: number, z: number) {
+    const group = new THREE.Group();
+    const height = this.getHeightAt(x, z);
+
+    // Stone material for walls
+    const stoneMaterial = new THREE.MeshStandardMaterial({
+      color: 0x666655,
+      roughness: 0.9,
+      metalness: 0.1,
+    });
+
+    // Mossy stone material
+    const mossyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x445544,
+      roughness: 0.95,
+      metalness: 0.05,
+    });
+
+    // Partial walls (2-4 per ruin)
+    const numWalls = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < numWalls; i++) {
+      const wallWidth = 3 + Math.random() * 4;
+      const wallHeight = 1.5 + Math.random() * 2;
+      const wallDepth = 0.4 + Math.random() * 0.2;
+
+      const wallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth);
+      const wall = new THREE.Mesh(wallGeometry, Math.random() > 0.5 ? stoneMaterial : mossyMaterial);
+
+      const angle = (i / numWalls) * Math.PI * 2 + Math.random() * 0.5;
+      const dist = 2 + Math.random() * 3;
+      wall.position.set(
+        Math.cos(angle) * dist,
+        wallHeight / 2,
+        Math.sin(angle) * dist
+      );
+      wall.rotation.y = angle + Math.PI / 2;
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      group.add(wall);
+    }
+
+    // Broken columns (2-3 per ruin)
+    const numColumns = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < numColumns; i++) {
+      const columnHeight = 1 + Math.random() * 2;
+      const columnRadius = 0.3 + Math.random() * 0.2;
+
+      const columnGeometry = new THREE.CylinderGeometry(columnRadius * 0.8, columnRadius, columnHeight, 8);
+      const column = new THREE.Mesh(columnGeometry, stoneMaterial);
+
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 1 + Math.random() * 4;
+      column.position.set(
+        Math.cos(angle) * dist,
+        columnHeight / 2,
+        Math.sin(angle) * dist
+      );
+      // Slight tilt for ruined look
+      column.rotation.x = (Math.random() - 0.5) * 0.2;
+      column.rotation.z = (Math.random() - 0.5) * 0.2;
+      column.castShadow = true;
+      group.add(column);
+    }
+
+    // Dig pit with glowing artifact
+    const pitGeometry = new THREE.CylinderGeometry(1.5, 1.2, 0.5, 12);
+    const pitMaterial = new THREE.MeshStandardMaterial({
+      color: 0x332211,
+      roughness: 1,
+    });
+    const pit = new THREE.Mesh(pitGeometry, pitMaterial);
+    pit.position.y = -0.2;
+    group.add(pit);
+
+    // Glowing artifact in the pit
+    const artifactGeometry = new THREE.OctahedronGeometry(0.3, 0);
+    const artifactMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00ffff,
+      emissive: 0x00ffff,
+      emissiveIntensity: 0.8,
+    });
+    const artifact = new THREE.Mesh(artifactGeometry, artifactMaterial);
+    artifact.position.y = 0.2;
+    artifact.rotation.y = Math.random() * Math.PI;
+    group.add(artifact);
+
+    group.position.set(x, height, z);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    this.scene.add(group);
+  }
+
+  // === BUILDINGS ===
+  private createBuildings() {
+    // Create houses scattered around the world (10 buildings)
+    const buildingPositions = [
+      { x: 25, z: 35, size: 'small' },
+      { x: -30, z: 25, size: 'small' },
+      { x: 40, z: -30, size: 'large' },
+      { x: -45, z: -40, size: 'small' },
+      { x: 70, z: 50, size: 'large' },
+      { x: -80, z: 20, size: 'small' },
+      { x: 55, z: -70, size: 'small' },
+      { x: -55, z: 80, size: 'large' },
+      { x: 90, z: -60, size: 'small' },
+      { x: -70, z: -80, size: 'small' },
+    ];
+
+    buildingPositions.forEach(pos => {
+      if (pos.size === 'large') {
+        this.addLargeBuilding(pos.x, pos.z);
+      } else {
+        this.addSmallCottage(pos.x, pos.z);
+      }
+    });
+  }
+
+  private addSmallCottage(x: number, z: number) {
+    const group = new THREE.Group();
+    const height = this.getHeightAt(x, z);
+
+    const width = 6;
+    const depth = 5;
+    const wallHeight = 3;
+
+    // Wall material
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8b7355,
+      roughness: 0.8,
+      metalness: 0.1,
+    });
+
+    // Floor
+    const floorGeometry = new THREE.BoxGeometry(width, 0.2, depth);
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4a3728,
+      roughness: 0.9,
+    });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.position.y = 0.1;
+    floor.receiveShadow = true;
+    group.add(floor);
+
+    // Back wall (solid)
+    const backWallGeometry = new THREE.BoxGeometry(width, wallHeight, 0.3);
+    const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
+    backWall.position.set(0, wallHeight / 2, -depth / 2 + 0.15);
+    backWall.castShadow = true;
+    backWall.receiveShadow = true;
+    group.add(backWall);
+
+    // Front wall with doorway
+    const doorWidth = 1.2;
+    const doorHeight = 2.2;
+
+    // Left part of front wall
+    const frontLeftGeometry = new THREE.BoxGeometry((width - doorWidth) / 2, wallHeight, 0.3);
+    const frontLeft = new THREE.Mesh(frontLeftGeometry, wallMaterial);
+    frontLeft.position.set(-(width + doorWidth) / 4, wallHeight / 2, depth / 2 - 0.15);
+    frontLeft.castShadow = true;
+    group.add(frontLeft);
+
+    // Right part of front wall
+    const frontRight = new THREE.Mesh(frontLeftGeometry, wallMaterial);
+    frontRight.position.set((width + doorWidth) / 4, wallHeight / 2, depth / 2 - 0.15);
+    frontRight.castShadow = true;
+    group.add(frontRight);
+
+    // Above door
+    const aboveDoorGeometry = new THREE.BoxGeometry(doorWidth, wallHeight - doorHeight, 0.3);
+    const aboveDoor = new THREE.Mesh(aboveDoorGeometry, wallMaterial);
+    aboveDoor.position.set(0, doorHeight + (wallHeight - doorHeight) / 2, depth / 2 - 0.15);
+    group.add(aboveDoor);
+
+    // Side walls
+    const sideWallGeometry = new THREE.BoxGeometry(0.3, wallHeight, depth);
+    const leftWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
+    leftWall.position.set(-width / 2 + 0.15, wallHeight / 2, 0);
+    leftWall.castShadow = true;
+    group.add(leftWall);
+
+    const rightWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
+    rightWall.position.set(width / 2 - 0.15, wallHeight / 2, 0);
+    rightWall.castShadow = true;
+    group.add(rightWall);
+
+    // Roof (simple triangular prism)
+    const roofMaterial = new THREE.MeshStandardMaterial({
+      color: 0x553322,
+      roughness: 0.7,
+    });
+    const roofShape = new THREE.Shape();
+    roofShape.moveTo(-width / 2 - 0.5, 0);
+    roofShape.lineTo(0, 2);
+    roofShape.lineTo(width / 2 + 0.5, 0);
+    roofShape.lineTo(-width / 2 - 0.5, 0);
+
+    const roofGeometry = new THREE.ExtrudeGeometry(roofShape, {
+      depth: depth + 1,
+      bevelEnabled: false,
+    });
+    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    roof.rotation.x = Math.PI / 2;
+    roof.position.set(0, wallHeight, -depth / 2 - 0.5);
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Simple furniture - table
+    const tableGeometry = new THREE.BoxGeometry(1.5, 0.1, 1);
+    const tableMaterial = new THREE.MeshStandardMaterial({ color: 0x6b4423 });
+    const table = new THREE.Mesh(tableGeometry, tableMaterial);
+    table.position.set(-1.5, 0.8, -1);
+    group.add(table);
+
+    // Table legs
+    const legGeometry = new THREE.BoxGeometry(0.1, 0.8, 0.1);
+    const legPositions = [
+      { x: -2.1, z: -1.4 },
+      { x: -0.9, z: -1.4 },
+      { x: -2.1, z: -0.6 },
+      { x: -0.9, z: -0.6 },
+    ];
+    legPositions.forEach(pos => {
+      const leg = new THREE.Mesh(legGeometry, tableMaterial);
+      leg.position.set(pos.x, 0.4, pos.z);
+      group.add(leg);
+    });
+
+    // Picture frame on back wall
+    this.addPictureFrame(group, 0, wallHeight / 2 + 0.5, -depth / 2 + 0.3, 0);
+
+    group.position.set(x, height, z);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    this.scene.add(group);
+
+    // Add collision
+    this.buildingColliders.push({ x, z, width, depth });
+  }
+
+  private addLargeBuilding(x: number, z: number) {
+    const group = new THREE.Group();
+    const height = this.getHeightAt(x, z);
+
+    const width = 12;
+    const depth = 10;
+    const wallHeight = 4;
+
+    // Wall material
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x9a8a7a,
+      roughness: 0.75,
+      metalness: 0.15,
+    });
+
+    // Floor
+    const floorGeometry = new THREE.BoxGeometry(width, 0.2, depth);
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x5a4738,
+      roughness: 0.9,
+    });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.position.y = 0.1;
+    floor.receiveShadow = true;
+    group.add(floor);
+
+    // Back wall with window
+    const windowWidth = 2;
+    const windowHeight = 1.5;
+    const windowY = 2;
+
+    // Back wall left
+    const backLeftGeometry = new THREE.BoxGeometry((width - windowWidth) / 2, wallHeight, 0.3);
+    const backLeft = new THREE.Mesh(backLeftGeometry, wallMaterial);
+    backLeft.position.set(-(width + windowWidth) / 4, wallHeight / 2, -depth / 2 + 0.15);
+    backLeft.castShadow = true;
+    group.add(backLeft);
+
+    // Back wall right
+    const backRight = new THREE.Mesh(backLeftGeometry, wallMaterial);
+    backRight.position.set((width + windowWidth) / 4, wallHeight / 2, -depth / 2 + 0.15);
+    backRight.castShadow = true;
+    group.add(backRight);
+
+    // Above window
+    const aboveWindowGeometry = new THREE.BoxGeometry(windowWidth, wallHeight - windowY - windowHeight, 0.3);
+    const aboveWindow = new THREE.Mesh(aboveWindowGeometry, wallMaterial);
+    aboveWindow.position.set(0, windowY + windowHeight + (wallHeight - windowY - windowHeight) / 2, -depth / 2 + 0.15);
+    group.add(aboveWindow);
+
+    // Below window
+    const belowWindowGeometry = new THREE.BoxGeometry(windowWidth, windowY - windowHeight / 2, 0.3);
+    const belowWindow = new THREE.Mesh(belowWindowGeometry, wallMaterial);
+    belowWindow.position.set(0, (windowY - windowHeight / 2) / 2, -depth / 2 + 0.15);
+    group.add(belowWindow);
+
+    // Front wall with double doorway
+    const doorWidth = 2.5;
+    const doorHeight = 2.8;
+
+    const frontLeftGeometry = new THREE.BoxGeometry((width - doorWidth) / 2, wallHeight, 0.3);
+    const frontLeft = new THREE.Mesh(frontLeftGeometry, wallMaterial);
+    frontLeft.position.set(-(width + doorWidth) / 4, wallHeight / 2, depth / 2 - 0.15);
+    frontLeft.castShadow = true;
+    group.add(frontLeft);
+
+    const frontRight = new THREE.Mesh(frontLeftGeometry, wallMaterial);
+    frontRight.position.set((width + doorWidth) / 4, wallHeight / 2, depth / 2 - 0.15);
+    frontRight.castShadow = true;
+    group.add(frontRight);
+
+    const aboveDoorGeometry = new THREE.BoxGeometry(doorWidth, wallHeight - doorHeight, 0.3);
+    const aboveDoor = new THREE.Mesh(aboveDoorGeometry, wallMaterial);
+    aboveDoor.position.set(0, doorHeight + (wallHeight - doorHeight) / 2, depth / 2 - 0.15);
+    group.add(aboveDoor);
+
+    // Side walls
+    const sideWallGeometry = new THREE.BoxGeometry(0.3, wallHeight, depth);
+    const leftWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
+    leftWall.position.set(-width / 2 + 0.15, wallHeight / 2, 0);
+    leftWall.castShadow = true;
+    group.add(leftWall);
+
+    const rightWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
+    rightWall.position.set(width / 2 - 0.15, wallHeight / 2, 0);
+    rightWall.castShadow = true;
+    group.add(rightWall);
+
+    // Flat roof
+    const roofGeometry = new THREE.BoxGeometry(width + 1, 0.3, depth + 1);
+    const roofMaterial = new THREE.MeshStandardMaterial({
+      color: 0x443333,
+      roughness: 0.8,
+    });
+    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    roof.position.y = wallHeight + 0.15;
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Interior dividing wall
+    const dividerGeometry = new THREE.BoxGeometry(0.2, wallHeight - 0.5, depth * 0.4);
+    const divider = new THREE.Mesh(dividerGeometry, wallMaterial);
+    divider.position.set(width / 4, (wallHeight - 0.5) / 2, -depth / 4);
+    group.add(divider);
+
+    // Furniture - bed
+    const bedBaseGeometry = new THREE.BoxGeometry(2, 0.4, 3);
+    const bedMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+    const bedBase = new THREE.Mesh(bedBaseGeometry, bedMaterial);
+    bedBase.position.set(-width / 3, 0.4, -depth / 3);
+    group.add(bedBase);
+
+    const mattressGeometry = new THREE.BoxGeometry(1.8, 0.3, 2.8);
+    const mattressMaterial = new THREE.MeshStandardMaterial({ color: 0xddd8c4 });
+    const mattress = new THREE.Mesh(mattressGeometry, mattressMaterial);
+    mattress.position.set(-width / 3, 0.75, -depth / 3);
+    group.add(mattress);
+
+    // Multiple picture frames
+    this.addPictureFrame(group, -3, wallHeight / 2 + 0.5, -depth / 2 + 0.3, 0);
+    this.addPictureFrame(group, 3, wallHeight / 2 + 0.5, -depth / 2 + 0.3, 0);
+    this.addPictureFrame(group, -width / 2 + 0.3, wallHeight / 2 + 0.5, 0, Math.PI / 2);
+
+    group.position.set(x, height, z);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    this.scene.add(group);
+
+    // Add collision
+    this.buildingColliders.push({ x, z, width, depth });
+  }
+
+  private addPictureFrame(parent: THREE.Group, x: number, y: number, z: number, rotationY: number) {
+    const frameGroup = new THREE.Group();
+
+    // Frame
+    const frameMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4a3520,
+      roughness: 0.7,
+    });
+
+    const frameWidth = 1.2;
+    const frameHeight = 0.9;
+    const frameDepth = 0.05;
+    const borderWidth = 0.08;
+
+    // Frame border pieces
+    const topGeometry = new THREE.BoxGeometry(frameWidth, borderWidth, frameDepth);
+    const top = new THREE.Mesh(topGeometry, frameMaterial);
+    top.position.y = frameHeight / 2 - borderWidth / 2;
+    frameGroup.add(top);
+
+    const bottom = new THREE.Mesh(topGeometry, frameMaterial);
+    bottom.position.y = -frameHeight / 2 + borderWidth / 2;
+    frameGroup.add(bottom);
+
+    const sideGeometry = new THREE.BoxGeometry(borderWidth, frameHeight, frameDepth);
+    const left = new THREE.Mesh(sideGeometry, frameMaterial);
+    left.position.x = -frameWidth / 2 + borderWidth / 2;
+    frameGroup.add(left);
+
+    const right = new THREE.Mesh(sideGeometry, frameMaterial);
+    right.position.x = frameWidth / 2 - borderWidth / 2;
+    frameGroup.add(right);
+
+    // Picture canvas (colored rectangle to simulate image)
+    const canvasGeometry = new THREE.PlaneGeometry(frameWidth - borderWidth * 2, frameHeight - borderWidth * 2);
+    const colors = [0x4488aa, 0x88aa44, 0xaa4488, 0x44aa88, 0x8844aa];
+    const canvasMaterial = new THREE.MeshStandardMaterial({
+      color: colors[Math.floor(Math.random() * colors.length)],
+      roughness: 0.5,
+    });
+    const canvas = new THREE.Mesh(canvasGeometry, canvasMaterial);
+    canvas.position.z = -0.01;
+    frameGroup.add(canvas);
+
+    frameGroup.position.set(x, y, z);
+    frameGroup.rotation.y = rotationY;
+    parent.add(frameGroup);
   }
 
   private createGlowingPlants() {
