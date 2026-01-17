@@ -34,14 +34,17 @@ export class TechnoJungle {
 
   // Get terrain height at any x,z position (must match createTerrain formula)
   getHeightAt(x: number, z: number): number {
-    // Same formula as terrain generation
+    // PlaneGeometry Y becomes -Z after rotation, so negate z to match
+    const gz = -z;
+
+    // Gentle rolling hills (reduced amplitude for less clipping)
     const height =
-      Math.sin(x * 0.05) * Math.cos(z * 0.05) * 2 +
-      Math.sin(x * 0.02 + z * 0.03) * 1.5;
+      Math.sin(x * 0.03) * Math.cos(gz * 0.03) * 1.0 +
+      Math.sin(x * 0.015 + gz * 0.02) * 0.8;
 
     // Keep area near spawn flat
     const distFromCenter = Math.sqrt(x * x + z * z);
-    const flattenFactor = Math.min(1, distFromCenter / 15);
+    const flattenFactor = Math.min(1, distFromCenter / 20);
 
     return height * flattenFactor;
   }
@@ -49,23 +52,24 @@ export class TechnoJungle {
   private createTerrain() {
     // Main ground with slight height variation
     const groundSize = 200;
-    const segments = 50;
+    const segments = 100; // Higher resolution for smoother terrain
     const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize, segments, segments);
 
     // Add gentle hills
     const positions = groundGeometry.attributes.position;
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i);
-      const z = positions.getY(i); // Y in plane geometry = Z in world
+      const gz = positions.getY(i); // geometry Y = -worldZ after rotation
 
-      // Gentle rolling hills using sine waves
+      // Gentle rolling hills (reduced amplitude)
       const height =
-        Math.sin(x * 0.05) * Math.cos(z * 0.05) * 2 +
-        Math.sin(x * 0.02 + z * 0.03) * 1.5;
+        Math.sin(x * 0.03) * Math.cos(gz * 0.03) * 1.0 +
+        Math.sin(x * 0.015 + gz * 0.02) * 0.8;
 
       // Keep area near spawn flat
-      const distFromCenter = Math.sqrt(x * x + z * z);
-      const flattenFactor = Math.min(1, distFromCenter / 15);
+      const worldZ = -gz;
+      const distFromCenter = Math.sqrt(x * x + worldZ * worldZ);
+      const flattenFactor = Math.min(1, distFromCenter / 20);
 
       positions.setZ(i, height * flattenFactor);
     }
