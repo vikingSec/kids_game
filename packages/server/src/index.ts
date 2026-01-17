@@ -35,6 +35,14 @@ function broadcast(message: ServerMessage, excludeId?: string): void {
   });
 }
 
+// Send a message to a specific player by ID
+function sendToPlayer(targetId: string, message: ServerMessage): void {
+  const session = sessions.get(targetId);
+  if (session && session.isJoined) {
+    session.send(message);
+  }
+}
+
 // Handle session disconnect
 function handleDisconnect(id: string): void {
   sessions.delete(id);
@@ -44,7 +52,7 @@ function handleDisconnect(id: string): void {
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws: WebSocket) => {
-  const session = new PlayerSession(ws, gameState, broadcast, handleDisconnect);
+  const session = new PlayerSession(ws, gameState, broadcast, sendToPlayer, handleDisconnect);
   sessions.set(session.id, session);
   console.log(`Connection from ${session.id}`);
 });

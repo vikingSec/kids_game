@@ -6,6 +6,7 @@ import { ThirdPersonCamera } from './game/Camera';
 import { WebSwing } from './abilities/WebSwing';
 import { TechnoJungle } from './world/TechnoJungle';
 import { Connection, ConnectionStatus } from './network/Connection';
+import { VoiceChat } from './network/VoiceChat';
 import type { PlayerData } from '@kids-game/shared';
 
 // Scene setup
@@ -80,20 +81,31 @@ let playerName = `Spider-${Math.floor(Math.random() * 1000)}`;
 // Network connection
 const SERVER_URL = `ws://${window.location.hostname}:3002`; // Sprint branch uses different port
 
+// Voice chat (created before connection so we can pass callbacks)
+let voiceChat: VoiceChat;
+
 const connection = new Connection(SERVER_URL, {
   onStatusChange: (status: ConnectionStatus) => {
     updateNetworkStatus(status);
   },
   onWelcome: (yourId: string, existingPlayers: Array<{ id: string; name: string; color: string }>) => {
     console.log(`[Network] Welcome! Your ID: ${yourId}`);
-    // Add existing players
+    voiceChat.setMyId(yourId);
+    // Add existing players and connect voice if enabled
     existingPlayers.forEach(p => {
       addRemotePlayer(p.id, p.name, p.color);
+      if (voiceChat.isEnabled()) {
+        voiceChat.connectToPeer(p.id);
+      }
     });
   },
   onPlayerJoined: (id: string, name: string, color: string) => {
     console.log(`[Network] ${name} joined!`);
     addRemotePlayer(id, name, color);
+    // Connect voice chat to new player if enabled
+    if (voiceChat.isEnabled()) {
+      voiceChat.connectToPeer(id);
+    }
   },
   onPlayerLeft: (id: string) => {
     const remote = remotePlayers.get(id);
@@ -101,6 +113,8 @@ const connection = new Connection(SERVER_URL, {
       console.log(`[Network] ${remote.name} left`);
       removeRemotePlayer(id);
     }
+    // Disconnect voice chat from leaving player
+    voiceChat.disconnectPeer(id);
   },
   onGameState: (players: PlayerData[]) => {
     // Update remote player positions
@@ -111,7 +125,20 @@ const connection = new Connection(SERVER_URL, {
       }
     });
   },
+  // WebRTC signaling callbacks
+  onRTCOffer: (fromId: string, offer: RTCSessionDescriptionInit) => {
+    voiceChat.handleOffer(fromId, offer);
+  },
+  onRTCAnswer: (fromId: string, answer: RTCSessionDescriptionInit) => {
+    voiceChat.handleAnswer(fromId, answer);
+  },
+  onRTCIceCandidate: (fromId: string, candidate: RTCIceCandidateInit) => {
+    voiceChat.handleIceCandidate(fromId, candidate);
+  },
 });
+
+// Initialize voice chat with connection
+voiceChat = new VoiceChat(connection);
 
 function addRemotePlayer(id: string, name: string, color: string): void {
   if (remotePlayers.has(id)) return;
@@ -216,7 +243,7 @@ settingsOverlay.innerHTML = `
       ">
     </div>
 
-    <div style="margin-bottom: 25px;">
+    <div style="margin-bottom: 20px;">
       <label style="display: block; margin-bottom: 8px; color: #aaa;">Spider Color:</label>
       <input type="color" id="settings-color" value="${currentPlayerColor}" style="
         width: 100%;
@@ -226,6 +253,21 @@ settingsOverlay.innerHTML = `
         cursor: pointer;
         background: #1a1a1a;
       ">
+    </div>
+
+    <div style="margin-bottom: 25px;">
+      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #aaa;">
+        <input type="checkbox" id="settings-voice" style="
+          width: 20px;
+          height: 20px;
+          cursor: pointer;
+          accent-color: #00ffff;
+        ">
+        <span>Enable Voice Chat</span>
+      </label>
+      <div id="voice-status" style="margin-top: 5px; font-size: 11px; color: #666;">
+        Voice chat is disabled
+      </div>
     </div>
 
     <div style="display: flex; gap: 10px;">
@@ -263,6 +305,22 @@ function openSettings(): void {
   settingsOpen = true;
   settingsOverlay.style.display = 'flex';
   document.exitPointerLock();
+
+  // Update voice chat checkbox to reflect current state
+  const voiceInput = document.getElementById('settings-voice') as HTMLInputElement;
+  const voiceStatus = document.getElementById('voice-status');
+  if (voiceInput) {
+    voiceInput.checked = voiceChat.isEnabled();
+  }
+  if (voiceStatus) {
+    if (voiceChat.isEnabled()) {
+      voiceStatus.textContent = 'Voice chat is enabled';
+      voiceStatus.style.color = '#00ff00';
+    } else {
+      voiceStatus.textContent = 'Voice chat is disabled';
+      voiceStatus.style.color = '#666';
+    }
+  }
 }
 
 function closeSettings(): void {
@@ -282,12 +340,15 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Settings button handlers
-document.getElementById('settings-save')?.addEventListener('click', () => {
+document.getElementById('settings-save')?.addEventListener('click', async () => {
   const nameInput = document.getElementById('settings-name') as HTMLInputElement;
   const colorInput = document.getElementById('settings-color') as HTMLInputElement;
+  const voiceInput = document.getElementById('settings-voice') as HTMLInputElement;
+  const voiceStatus = document.getElementById('voice-status');
 
   const newName = nameInput.value.trim();
   const newColor = colorInput.value;
+  const voiceEnabled = voiceInput.checked;
 
   if (newName && newName !== playerName) {
     playerName = newName;
@@ -300,6 +361,33 @@ document.getElementById('settings-save')?.addEventListener('click', () => {
   if (newColor !== currentPlayerColor) {
     currentPlayerColor = newColor;
     player.setColor(newColor); // Update local player color
+  }
+
+  // Handle voice chat toggle
+  if (voiceEnabled && !voiceChat.isEnabled()) {
+    const success = await voiceChat.enable();
+    if (success) {
+      // Connect to all existing players
+      remotePlayers.forEach((_, id) => {
+        voiceChat.connectToPeer(id);
+      });
+      if (voiceStatus) {
+        voiceStatus.textContent = 'Voice chat is enabled';
+        voiceStatus.style.color = '#00ff00';
+      }
+    } else {
+      voiceInput.checked = false;
+      if (voiceStatus) {
+        voiceStatus.textContent = 'Failed to enable microphone';
+        voiceStatus.style.color = '#ff4444';
+      }
+    }
+  } else if (!voiceEnabled && voiceChat.isEnabled()) {
+    voiceChat.disable();
+    if (voiceStatus) {
+      voiceStatus.textContent = 'Voice chat is disabled';
+      voiceStatus.style.color = '#666';
+    }
   }
 
   // Send settings to server
